@@ -1,5 +1,6 @@
 {
     "name": "Node.js Development Container",
     "image": "node:22",
-    "remoteUser": "root"
+    "remoteUser": "root",
+    "postCreateCommand": "npm install -g @google/gemini-cli"
 }
