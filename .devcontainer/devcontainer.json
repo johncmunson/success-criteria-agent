@@ -1,0 +1,5 @@
+{
+    "name": "Node.js Development Container",
+    "image": "node:22",
+    "remoteUser": "root"
+}
