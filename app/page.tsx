@@ -4,69 +4,69 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Switch } from "@/components/ui/switch"
-import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
-import { Progress } from "@/components/ui/progress"
+// import { Input } from "@/components/ui/input"
+// import { Label } from "@/components/ui/label"
+// import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+// import { Switch } from "@/components/ui/switch"
+// import { Badge } from "@/components/ui/badge"
+// import { Separator } from "@/components/ui/separator"
+// import { Progress } from "@/components/ui/progress"
 import { CheckCircle, XCircle, Plus, Trash2, Wand2, Play, BarChart3 } from "lucide-react"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+// import { Alert, AlertDescription } from "@/components/ui/alert"
 
-interface SuccessCriterion {
-  id: string
-  description: string
-  type: "hard" | "soft"
-  weight: number
-  required: boolean
-  threshold?: number // For soft criteria
-}
+// interface SuccessCriterion {
+//   id: string
+//   description: string
+//   type: "hard" | "soft"
+//   weight: number
+//   required: boolean
+//   threshold?: number // For soft criteria
+// }
 
-interface EvaluationResult {
-  criterionId: string
-  passed: boolean
-  score: number
-  contribution: number
-  feedback?: string
-}
+// interface EvaluationResult {
+//   criterionId: string
+//   passed: boolean
+//   score: number
+//   contribution: number
+//   feedback?: string
+// }
 
-interface OverallResult {
-  totalScore: number
-  passed: boolean
-  rejected: boolean
-  results: EvaluationResult[]
-}
+// interface OverallResult {
+//   totalScore: number
+//   passed: boolean
+//   rejected: boolean
+//   results: EvaluationResult[]
+// }
 
 export default function Home() {
   const [prompt, setPrompt] = useState("")
   const [generatedResponse, setGeneratedResponse] = useState("")
-  const [successCriteria, setSuccessCriteria] = useState<SuccessCriterion[]>([])
-  const [totalScoreThreshold, setTotalScoreThreshold] = useState(7)
-  const [evaluationResult, setEvaluationResult] = useState<OverallResult | null>(null)
+  // const [successCriteria, setSuccessCriteria] = useState<SuccessCriterion[]>([])
+  // const [totalScoreThreshold, setTotalScoreThreshold] = useState(7)
+  // const [evaluationResult, setEvaluationResult] = useState<OverallResult | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
-  const [isEvaluating, setIsEvaluating] = useState(false)
-  const [isGeneratingCriteria, setIsGeneratingCriteria] = useState(false)
+  // const [isEvaluating, setIsEvaluating] = useState(false)
+  // const [isGeneratingCriteria, setIsGeneratingCriteria] = useState(false)
 
-  const addCriterion = () => {
-    const newCriterion: SuccessCriterion = {
-      id: Date.now().toString(),
-      description: "",
-      type: "soft",
-      weight: 1,
-      required: false,
-      threshold: 7,
-    }
-    setSuccessCriteria([...successCriteria, newCriterion])
-  }
+  // const addCriterion = () => {
+  //   const newCriterion: SuccessCriterion = {
+  //     id: Date.now().toString(),
+  //     description: "",
+  //     type: "soft",
+  //     weight: 1,
+  //     required: false,
+  //     threshold: 7,
+  //   }
+  //   setSuccessCriteria([...successCriteria, newCriterion])
+  // }
 
-  const updateCriterion = (id: string, updates: Partial<SuccessCriterion>) => {
-    setSuccessCriteria((criteria) => criteria.map((c) => (c.id === id ? { ...c, ...updates } : c)))
-  }
+  // const updateCriterion = (id: string, updates: Partial<SuccessCriterion>) => {
+  //   setSuccessCriteria((criteria) => criteria.map((c) => (c.id === id ? { ...c, ...updates } : c)))
+  // }
 
-  const removeCriterion = (id: string) => {
-    setSuccessCriteria((criteria) => criteria.filter((c) => c.id !== id))
-  }
+  // const removeCriterion = (id: string) => {
+  //   setSuccessCriteria((criteria) => criteria.filter((c) => c.id !== id))
+  // }
 
   const generateResponse = async () => {
     setIsGenerating(true)
@@ -78,88 +78,88 @@ export default function Home() {
     setIsGenerating(false)
   }
 
-  const generateCriteria = async () => {
-    setIsGeneratingCriteria(true)
-    // Simulate AI-generated criteria based on prompt
-    await new Promise((resolve) => setTimeout(resolve, 1500))
+  // const generateCriteria = async () => {
+  //   setIsGeneratingCriteria(true)
+  //   // Simulate AI-generated criteria based on prompt
+  //   await new Promise((resolve) => setTimeout(resolve, 1500))
 
-    const generatedCriteria: SuccessCriterion[] = [
-      {
-        id: Date.now().toString(),
-        description: "Response directly addresses the main question or request",
-        type: "hard",
-        weight: 2,
-        required: true,
-      },
-      {
-        id: (Date.now() + 1).toString(),
-        description: "Content is factually accurate and well-researched",
-        type: "soft",
-        weight: 1.5,
-        required: true,
-        threshold: 8,
-      },
-      {
-        id: (Date.now() + 2).toString(),
-        description: "Writing is clear, coherent, and well-structured",
-        type: "soft",
-        weight: 1,
-        required: false,
-        threshold: 7,
-      },
-      {
-        id: (Date.now() + 3).toString(),
-        description: "Response length is appropriate for the request",
-        type: "soft",
-        weight: 0.5,
-        required: false,
-        threshold: 6,
-      },
-    ]
+  //   const generatedCriteria: SuccessCriterion[] = [
+  //     {
+  //       id: Date.now().toString(),
+  //       description: "Response directly addresses the main question or request",
+  //       type: "hard",
+  //       weight: 2,
+  //       required: true,
+  //     },
+  //     {
+  //       id: (Date.now() + 1).toString(),
+  //       description: "Content is factually accurate and well-researched",
+  //       type: "soft",
+  //       weight: 1.5,
+  //       required: true,
+  //       threshold: 8,
+  //     },
+  //     {
+  //       id: (Date.now() + 2).toString(),
+  //       description: "Writing is clear, coherent, and well-structured",
+  //       type: "soft",
+  //       weight: 1,
+  //       required: false,
+  //       threshold: 7,
+  //     },
+  //     {
+  //       id: (Date.now() + 3).toString(),
+  //       description: "Response length is appropriate for the request",
+  //       type: "soft",
+  //       weight: 0.5,
+  //       required: false,
+  //       threshold: 6,
+  //     },
+  //   ]
 
-    setSuccessCriteria(generatedCriteria)
-    setIsGeneratingCriteria(false)
-  }
+  //   setSuccessCriteria(generatedCriteria)
+  //   setIsGeneratingCriteria(false)
+  // }
 
-  const runEvaluation = async () => {
-    setIsEvaluating(true)
-    await new Promise((resolve) => setTimeout(resolve, 2000))
+  // const runEvaluation = async () => {
+  //   setIsEvaluating(true)
+  //   await new Promise((resolve) => setTimeout(resolve, 2000))
 
-    // Simulate evaluation results
-    const results: EvaluationResult[] = successCriteria.map((criterion) => {
-      const score = criterion.type === "hard" ? (Math.random() > 0.2 ? 10 : 0) : Math.floor(Math.random() * 4) + 7 // 7-10 range for demo
+  //   // Simulate evaluation results
+  //   const results: EvaluationResult[] = successCriteria.map((criterion) => {
+  //     const score = criterion.type === "hard" ? (Math.random() > 0.2 ? 10 : 0) : Math.floor(Math.random() * 4) + 7 // 7-10 range for demo
 
-      const passed = criterion.type === "hard" ? score === 10 : score >= (criterion.threshold || 7)
+  //     const passed = criterion.type === "hard" ? score === 10 : score >= (criterion.threshold || 7)
 
-      const contribution = (score / 10) * criterion.weight
+  //     const contribution = (score / 10) * criterion.weight
 
-      return {
-        criterionId: criterion.id,
-        passed,
-        score,
-        contribution,
-        feedback: `Evaluation feedback for: ${criterion.description.substring(0, 50)}...`,
-      }
-    })
+  //     return {
+  //       criterionId: criterion.id,
+  //       passed,
+  //       score,
+  //       contribution,
+  //       feedback: `Evaluation feedback for: ${criterion.description.substring(0, 50)}...`,
+  //     }
+  //   })
 
-    const totalWeight = successCriteria.reduce((sum, c) => sum + c.weight, 0)
-    const totalScore = (results.reduce((sum, r) => sum + r.contribution, 0) / totalWeight) * 10
+  //   const totalWeight = successCriteria.reduce((sum, c) => sum + c.weight, 0)
+  //   const totalScore = (results.reduce((sum, r) => sum + r.contribution, 0) / totalWeight) * 10
 
-    const requiredFailed = results.some((r, i) => successCriteria[i].required && !r.passed)
+  //   const requiredFailed = results.some((r, i) => successCriteria[i].required && !r.passed)
 
-    const passed = !requiredFailed && totalScore >= totalScoreThreshold
+  //   const passed = !requiredFailed && totalScore >= totalScoreThreshold
 
-    setEvaluationResult({
-      totalScore,
-      passed,
-      rejected: !passed,
-      results,
-    })
+  //   setEvaluationResult({
+  //     totalScore,
+  //     passed,
+  //     rejected: !passed,
+  //     results,
+  //   })
 
-    setIsEvaluating(false)
-  }
+  //   setIsEvaluating(false)
+  // }
 
-  const totalWeight = successCriteria.reduce((sum, c) => sum + c.weight, 0)
+  // const totalWeight = successCriteria.reduce((sum, c) => sum + c.weight, 0)
 
   return (
     <div className="h-screen bg-gray-50 p-6 flex flex-col">
@@ -203,7 +203,7 @@ export default function Home() {
           </div>
 
           {/* Middle Column - Success Criteria */}
-          <div className="flex flex-col min-h-[600px] h-full">
+          {/* <div className="flex flex-col min-h-[600px] h-full">
             <Card className="flex-1 flex flex-col">
               <CardHeader>
                 <CardTitle>Success Criteria</CardTitle>
@@ -338,7 +338,7 @@ export default function Home() {
                 )}
               </CardContent>
             </Card>
-          </div>
+          </div> */}
 
           {/* Right Column - Generated Response */}
           <div className="flex flex-col min-h-[600px] h-full">
@@ -363,7 +363,7 @@ export default function Home() {
         </div>
 
         {/* Evaluation Section */}
-        {generatedResponse && successCriteria.length > 0 && (
+        {/* {generatedResponse && successCriteria.length > 0 && (
           <Card>
             <CardHeader>
               <CardTitle>Evaluation</CardTitle>
@@ -383,7 +383,6 @@ export default function Home() {
 
               {evaluationResult && (
                 <div className="space-y-4">
-                  {/* Overall Result */}
                   <Alert
                     className={evaluationResult.passed ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50"}
                   >
@@ -403,7 +402,6 @@ export default function Home() {
                     </div>
                   </Alert>
 
-                  {/* Score Progress */}
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
                       <span>Overall Score</span>
@@ -416,7 +414,6 @@ export default function Home() {
                     </div>
                   </div>
 
-                  {/* Individual Results */}
                   <div className="space-y-3">
                     <h4 className="font-medium">Individual Criterion Results</h4>
                     {evaluationResult.results.map((result, index) => {
@@ -486,7 +483,7 @@ export default function Home() {
               )}
             </CardContent>
           </Card>
-        )}
+        )} */}
       </div>
     </div>
   )
