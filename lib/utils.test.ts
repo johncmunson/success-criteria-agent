@@ -34,7 +34,7 @@ describe('Success Criteria Evaluation', () => {
     });
 
     it('should return false for a hard criterion with a score other than 0 or 1', () => {
-      const criterion: any = { type: 'hard', score: 0.5, weight: 1 };
+      const criterion = ({ type: 'hard', score: 0.5, weight: 1 } as unknown) as Criterion;
       expect(isValidCriterion(criterion)).toBe(false);
     });
 
@@ -44,7 +44,7 @@ describe('Success Criteria Evaluation', () => {
     });
 
     it('should return false for an invalid criterion type', () => {
-      const criterion: any = { type: 'invalid', score: 0.5, weight: 1 };
+      const criterion = ({ type: 'invalid', score: 0.5, weight: 1 } as unknown) as Criterion;
       expect(isValidCriterion(criterion)).toBe(false);
     });
   });
