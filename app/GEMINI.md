@@ -13,14 +13,14 @@ In this guide, you will learn how to use the `useCompletion` hook in your applic
 ## Example
 
 ```tsx filename='app/page.tsx'
-'use client';
+"use client"
 
-import { useCompletion } from '@ai-sdk/react';
+import { useCompletion } from "@ai-sdk/react"
 
 export default function Page() {
   const { completion, input, handleInputChange, handleSubmit } = useCompletion({
-    api: '/api/completion',
-  });
+    api: "/api/completion",
+  })
 
   return (
     <form onSubmit={handleSubmit}>
@@ -33,26 +33,26 @@ export default function Page() {
       <button type="submit">Submit</button>
       <div>{completion}</div>
     </form>
-  );
+  )
 }
 ```
 
 ```ts filename='app/api/completion/route.ts'
-import { streamText } from 'ai';
-import { openai } from '@ai-sdk/openai';
+import { streamText } from "ai"
+import { openai } from "@ai-sdk/openai"
 
 // Allow streaming responses up to 30 seconds
-export const maxDuration = 30;
+export const maxDuration = 30
 
 export async function POST(req: Request) {
-  const { prompt }: { prompt: string } = await req.json();
+  const { prompt }: { prompt: string } = await req.json()
 
   const result = streamText({
-    model: openai('gpt-3.5-turbo'),
+    model: openai("gpt-3.5-turbo"),
     prompt,
-  });
+  })
 
-  return result.toUIMessageStreamResponse();
+  return result.toUIMessageStreamResponse()
 }
 ```
 
@@ -104,13 +104,13 @@ In the initial example, we have `handleSubmit` and `handleInputChange` callbacks
 The following example demonstrates how to use more granular APIs like `setInput` with your custom input and submit button components:
 
 ```tsx
-const { input, setInput } = useCompletion();
+const { input, setInput } = useCompletion()
 
 return (
   <>
-    <MyCustomInput value={input} onChange={value => setInput(value)} />
+    <MyCustomInput value={input} onChange={(value) => setInput(value)} />
   </>
-);
+)
 ```
 
 ### Cancelation
@@ -169,15 +169,15 @@ By default, the `useCompletion` hook sends a HTTP POST request to the `/api/comp
 
 ```tsx
 const { messages, input, handleInputChange, handleSubmit } = useCompletion({
-  api: '/api/custom-completion',
+  api: "/api/custom-completion",
   headers: {
-    Authorization: 'your_token',
+    Authorization: "your_token",
   },
   body: {
-    user_id: '123',
+    user_id: "123",
   },
-  credentials: 'same-origin',
-});
+  credentials: "same-origin",
+})
 ```
 
 In this example, the `useCompletion` hook sends a POST request to the `/api/completion` endpoint with the specified headers, additional body fields, and credentials for that fetch request. On your server side, you can handle the request with these additional information.
