@@ -30,6 +30,7 @@ import {
   BatteryMedium,
   BatteryFull,
   BatteryLow,
+  Paperclip,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -118,6 +119,34 @@ const initialRequirements: Requirement[] = [
   },
   {
     id: 2,
+    text: "Include practical examples",
+    weight: 1,
+    type: "subjective",
+    threshold: 0.5,
+    model: "gpt-4o",
+    required: false,
+    fitToContent: false,
+    loading: false,
+    result: null,
+    score: null,
+    reasoning: null,
+  },
+  {
+    id: 3,
+    text: "Response should be under 500 words",
+    weight: 1,
+    type: "pass-fail",
+    threshold: 0,
+    model: "gpt-4o",
+    required: false,
+    fitToContent: false,
+    loading: false,
+    result: null,
+    score: null,
+    reasoning: null,
+  },
+  {
+    id: 4,
     text: "Include practical examples",
     weight: 1,
     type: "subjective",
@@ -465,7 +494,7 @@ const FileUploader = ({ onAddFiles }: FileUploaderProps) => {
     <Popover open={isOpen} onOpenChange={setIsOpen}>
       <PopoverTrigger asChild>
         <Button variant="ghost" size="icon" className="h-8 w-8">
-          <Plus className="h-4 w-4" />
+          <Paperclip className="h-4 w-4" />
           <span className="sr-only">Add</span>
         </Button>
       </PopoverTrigger>
@@ -533,6 +562,7 @@ const ToolsPopover = ({ enabledTools, onToolChange }: ToolsPopoverProps) => {
 
 export default function App() {
   const [prompt, setPrompt] = useState("")
+  const [canvas, setCanvas] = useState("")
   const [selectedModel, setSelectedModel] = useState("gpt-4o")
   const [requirements, setRequirements] = useState(initialRequirements)
   const [successThreshold, setSuccessThreshold] = useState(0.8)
@@ -554,27 +584,6 @@ export default function App() {
     useCompletion({
       api: "/api/generate-response",
     })
-
-  const cardContentRef = useRef<HTMLDivElement | null>(null)
-  const promptTextareaRef = useRef<HTMLTextAreaElement | null>(null)
-
-  const [textareaReady, setTextareaReady] = useState(false)
-
-  const syncTextareaHeight = useCallback(() => {
-    const card = cardContentRef.current
-    const textarea = promptTextareaRef.current
-    if (card && textarea) {
-      textarea.style.height = "0px"
-      textarea.style.height = card.getBoundingClientRect().height + "px"
-      setTextareaReady(true)
-    }
-  }, [])
-
-  useEffect(() => {
-    syncTextareaHeight()
-    window.addEventListener("resize", syncTextareaHeight)
-    return () => window.removeEventListener("resize", syncTextareaHeight)
-  }, [])
 
   const models = [
     "gpt-4o",
@@ -620,35 +629,12 @@ export default function App() {
     setEnabledTools((prev) => ({ ...prev, [tool]: value }))
   }
 
-  const textareaRefs = useRef<{ [key: number]: HTMLTextAreaElement | null }>({})
-
-  useEffect(() => {
-    // On mount and whenever requirements or their fitToContent changes, update heights
-    requirements.forEach((req) => {
-      const ref = textareaRefs.current[req.id]
-      if (ref) {
-        if (req.fitToContent) {
-          ref.style.height = "auto"
-          ref.style.height = `${ref.scrollHeight}px`
-        } else {
-          ref.style.height = "38px" // or whatever default height you want
-        }
-      }
-    })
-  }, [requirements])
-
   const toggleFitToContent = (id: number) => {
     setRequirements((prev) =>
       prev.map((req) =>
         req.id === id ? { ...req, fitToContent: !req.fitToContent } : req,
       ),
     )
-  }
-
-  const isOverflowing = (id: number) => {
-    const ref = textareaRefs.current[id]
-    if (!ref) return false
-    return ref.scrollHeight > ref.clientHeight + 1 // +1 for rounding
   }
 
   const runSingleRequirement = async (req: (typeof requirements)[0]) => {
@@ -774,17 +760,13 @@ export default function App() {
             ))}
           </div>
         </header>
-        <ResizablePanelGroup
-          direction="horizontal"
-          className="flex-1"
-          onLayout={syncTextareaHeight}
-        >
-          <ResizablePanel defaultSize={50}>
-            <ResizablePanelGroup
-              direction="vertical"
-              onLayout={syncTextareaHeight}
-            >
-              <ResizablePanel defaultSize={50} className="p-4 !overflow-y-auto">
+        <ResizablePanelGroup direction="horizontal" className="flex-1">
+          <ResizablePanel defaultSize={50} className="scrollbar-hidden">
+            <ResizablePanelGroup direction="vertical">
+              <ResizablePanel
+                defaultSize={50}
+                className="p-4 !overflow-y-auto scrollbar-hidden"
+              >
                 {/* User Prompt Section */}
                 <div className="h-full">
                   <Card className="flex flex-col h-full border-none shadow-none gap-4 py-5">
@@ -813,18 +795,11 @@ export default function App() {
                         </Button>
                       </div>
                     </CardHeader>
-                    <CardContent
-                      className="flex flex-1 flex-col relative"
-                      ref={cardContentRef}
-                    >
+                    <CardContent className="flex flex-1 flex-col relative">
                       <Textarea
-                        ref={promptTextareaRef}
-                        style={{
-                          visibility: textareaReady ? "visible" : "hidden",
-                        }}
-                        className="resize-none pb-16 scrollbar-hidden"
                         value={prompt}
                         onChange={(e) => setPrompt(e.target.value)}
+                        className="flex-1 resize-none pb-16 scrollbar-hidden field-sizing-fixed"
                       />
                       <div className="absolute py-2 bottom-px left-6 right-6 mx-2 flex items-center justify-between bg-background/95">
                         <div className="flex items-center gap-1">
@@ -866,8 +841,11 @@ export default function App() {
                   </Card>
                 </div>
               </ResizablePanel>
-              <ResizableHandle withHandle />
-              <ResizablePanel defaultSize={50} className="p-4 !overflow-y-auto">
+              <ResizableHandle withHandle className="bg-primary/25" />
+              <ResizablePanel
+                defaultSize={50}
+                className="p-4 !overflow-y-auto scrollbar-hidden"
+              >
                 {/* Requirements Section */}
                 <div className="h-full">
                   <Card className="flex flex-col h-full border-none shadow-none gap-4 py-5">
@@ -886,61 +864,52 @@ export default function App() {
                         </Button>
                       </div>
                     </CardHeader>
-                    <CardContent className="flex flex-1 flex-col gap-3">
-                      <div className="flex-1 space-y-8 min-h-[120px]">
-                        {requirements.map((req) => (
-                          <div
-                            key={req.id}
-                            className="flex flex-col gap-2 -ml-6"
-                          >
-                            <div className="flex">
-                              <Button
-                                type="button"
-                                size="icon"
-                                variant="ghost"
-                                className="h-6 w-6 mt-1 hover:text-red-500"
-                              >
-                                <X className="h-4 w-4" />
-                              </Button>
-                              <div className="flex-1 flex flex-col">
-                                <div className="relative w-full">
-                                  <Textarea
-                                    ref={(el) => {
-                                      textareaRefs.current[req.id] = el
-                                    }}
-                                    placeholder="Enter requirement..."
-                                    className="text-sm resize-none overflow-auto pr-8 scrollbar-hidden"
-                                    style={{
-                                      height: req.fitToContent
-                                        ? "auto"
-                                        : "38px",
-                                      overflowY: req.fitToContent
-                                        ? "hidden"
-                                        : "auto",
-                                      transition: "height 0.2s",
-                                    }}
-                                    value={req.text}
-                                    rows={1}
-                                    onChange={(e) =>
-                                      handleRequirementChange(
-                                        req.id,
-                                        "text",
-                                        e.target.value,
-                                      )
-                                    }
-                                  />
-                                  {isOverflowing(req.id) && (
+                    <CardContent className="flex flex-1 flex-col gap-3 overflow-auto">
+                      <Card className="flex flex-1 flex-col pl-8 pr-4 rounded-md shadow-xs overflow-auto scrollbar-hidden">
+                        <div className="flex-1 space-y-8 min-h-[120px]">
+                          {requirements.map((req) => (
+                            <div
+                              key={req.id}
+                              className="flex flex-col gap-2 -ml-6"
+                            >
+                              <div className="flex">
+                                <Button
+                                  type="button"
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-6 w-6 mt-1 hover:text-red-500"
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                                <div className="flex-1 flex flex-col">
+                                  <div className="relative w-full">
+                                    <Textarea
+                                      placeholder="Enter requirement..."
+                                      className={cn(
+                                        "text-sm pr-8 resize-none scrollbar-hidden",
+                                        req.fitToContent
+                                          ? "field-sizing-content overflow-hidden"
+                                          : "field-sizing-fixed h-9 overflow-auto",
+                                      )}
+                                      rows={req.fitToContent ? undefined : 1}
+                                      value={req.text}
+                                      onChange={(e) =>
+                                        handleRequirementChange(
+                                          req.id,
+                                          "text",
+                                          e.target.value,
+                                        )
+                                      }
+                                    />
                                     <Button
                                       type="button"
                                       size="icon"
                                       variant="ghost"
-                                      className="absolute top-1/2 right-2 h-6 w-6 -translate-y-1/2"
+                                      className="absolute top-1 right-1 h-6 w-6 text-primary/30"
                                       onClick={() => toggleFitToContent(req.id)}
-                                      tabIndex={-1}
                                       title={
                                         req.fitToContent ? "Collapse" : "Expand"
                                       }
-                                      style={{ pointerEvents: "auto" }}
                                     >
                                       {req.fitToContent ? (
                                         <ChevronsDownUp className="h-4 w-4" />
@@ -948,141 +917,148 @@ export default function App() {
                                         <ChevronsUpDown className="h-4 w-4" />
                                       )}
                                     </Button>
-                                  )}
-                                </div>
-                                <div>
-                                  <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
-                                    <div className="flex items-center gap-1.5">
-                                      <Label htmlFor={`req-${req.id}`}>
-                                        Required?
-                                      </Label>
-                                      <Checkbox
-                                        id={`req-${req.id}`}
-                                        checked={req.required}
-                                        onCheckedChange={(checked: boolean) =>
-                                          handleRequirementChange(
-                                            req.id,
-                                            "required",
-                                            checked,
-                                          )
-                                        }
-                                      />
-                                    </div>
-                                    <div className="flex items-center gap-1.5">
-                                      <Label htmlFor={`weight-${req.id}`}>
-                                        Weight
-                                      </Label>
-                                      <Input
-                                        id={`weight-${req.id}`}
-                                        type="number"
-                                        min="1"
-                                        step="1"
-                                        value={req.weight}
-                                        onChange={(e) =>
-                                          handleRequirementChange(
-                                            req.id,
-                                            "weight",
-                                            Number.parseInt(e.target.value),
-                                          )
-                                        }
-                                        className="h-6 w-14 text-xs"
-                                      />
-                                    </div>
-                                    <div className="flex items-center gap-1.5">
-                                      <Label>Type</Label>
-                                      <Select
-                                        value={req.type}
-                                        onValueChange={(
-                                          value: "pass-fail" | "subjective",
-                                        ) =>
-                                          handleRequirementChange(
-                                            req.id,
-                                            "type",
-                                            value,
-                                          )
-                                        }
-                                      >
-                                        <SelectTrigger className="h-6 text-xs w-28">
-                                          <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          <SelectItem value="pass-fail">
-                                            Pass/Fail
-                                          </SelectItem>
-                                          <SelectItem value="subjective">
-                                            Subjective
-                                          </SelectItem>
-                                        </SelectContent>
-                                      </Select>
-                                    </div>
-                                    {req.type === "subjective" && (
+                                  </div>
+                                  <div>
+                                    <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
                                       <div className="flex items-center gap-1.5">
-                                        <Label htmlFor={`threshold-${req.id}`}>
-                                          Threshold
+                                        <Label htmlFor={`req-${req.id}`}>
+                                          Required?
+                                        </Label>
+                                        <Checkbox
+                                          id={`req-${req.id}`}
+                                          checked={req.required}
+                                          onCheckedChange={(checked: boolean) =>
+                                            handleRequirementChange(
+                                              req.id,
+                                              "required",
+                                              checked,
+                                            )
+                                          }
+                                        />
+                                      </div>
+                                      <div className="flex items-center gap-1.5">
+                                        <Label htmlFor={`weight-${req.id}`}>
+                                          Weight
                                         </Label>
                                         <Input
-                                          id={`threshold-${req.id}`}
+                                          id={`weight-${req.id}`}
                                           type="number"
-                                          min="0"
-                                          max="1"
-                                          step="0.1"
-                                          value={req.threshold}
+                                          min="1"
+                                          step="1"
+                                          value={req.weight}
                                           onChange={(e) =>
                                             handleRequirementChange(
                                               req.id,
-                                              "threshold",
-                                              Number.parseFloat(e.target.value),
+                                              "weight",
+                                              Number.parseInt(e.target.value),
                                             )
                                           }
-                                          className="h-6 w-16 text-xs"
+                                          className="h-6 w-14 text-xs"
                                         />
                                       </div>
-                                    )}
-                                    <div className="ml-auto flex items-center gap-1">
-                                      <ModelSelector
-                                        models={models}
-                                        selectedModel={req.model}
-                                        onModelChange={(model) =>
-                                          handleRequirementChange(
-                                            req.id,
-                                            "model",
-                                            model,
-                                          )
-                                        }
-                                        buttonClassName="h-6"
-                                      />
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-6 w-6"
-                                        onClick={() =>
-                                          handleRunRequirement(req.id)
-                                        }
-                                        disabled={req.loading}
-                                      >
-                                        {req.loading ? (
-                                          <Loader2 className="h-3 w-3 animate-spin" />
-                                        ) : (
-                                          <Play className="h-3 w-3" />
-                                        )}
-                                      </Button>
-                                      <Separator
-                                        orientation="vertical"
-                                        className="h-4"
-                                      />
-                                      <ResultIndicator
-                                        result={req.result}
-                                        score={req.score}
-                                        reasoning={req.reasoning}
-                                      />
+                                      <div className="flex items-center gap-1.5">
+                                        <Label>Type</Label>
+                                        <Select
+                                          value={req.type}
+                                          onValueChange={(
+                                            value: "pass-fail" | "subjective",
+                                          ) =>
+                                            handleRequirementChange(
+                                              req.id,
+                                              "type",
+                                              value,
+                                            )
+                                          }
+                                        >
+                                          <SelectTrigger className="h-6 text-xs w-28">
+                                            <SelectValue />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <SelectItem value="pass-fail">
+                                              Pass/Fail
+                                            </SelectItem>
+                                            <SelectItem value="subjective">
+                                              Subjective
+                                            </SelectItem>
+                                          </SelectContent>
+                                        </Select>
+                                      </div>
+                                      {req.type === "subjective" && (
+                                        <div className="flex items-center gap-1.5">
+                                          <Label
+                                            htmlFor={`threshold-${req.id}`}
+                                          >
+                                            Threshold
+                                          </Label>
+                                          <Input
+                                            id={`threshold-${req.id}`}
+                                            type="number"
+                                            min="0"
+                                            max="1"
+                                            step="0.1"
+                                            value={req.threshold}
+                                            onChange={(e) =>
+                                              handleRequirementChange(
+                                                req.id,
+                                                "threshold",
+                                                Number.parseFloat(
+                                                  e.target.value,
+                                                ),
+                                              )
+                                            }
+                                            className="h-6 w-16 text-xs"
+                                          />
+                                        </div>
+                                      )}
+                                      <div className="ml-auto flex items-center gap-1">
+                                        <ModelSelector
+                                          models={models}
+                                          selectedModel={req.model}
+                                          onModelChange={(model) =>
+                                            handleRequirementChange(
+                                              req.id,
+                                              "model",
+                                              model,
+                                            )
+                                          }
+                                          buttonClassName="h-6"
+                                        />
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-6 w-6"
+                                          onClick={() =>
+                                            handleRunRequirement(req.id)
+                                          }
+                                          disabled={req.loading}
+                                        >
+                                          {req.loading ? (
+                                            <Loader2 className="h-3 w-3 animate-spin" />
+                                          ) : (
+                                            <Play className="h-3 w-3" />
+                                          )}
+                                        </Button>
+                                        <Separator
+                                          orientation="vertical"
+                                          className="h-4"
+                                        />
+                                        <ResultIndicator
+                                          result={req.result}
+                                          score={req.score}
+                                          reasoning={req.reasoning}
+                                        />
+                                      </div>
                                     </div>
                                   </div>
                                 </div>
                               </div>
                             </div>
-                          </div>
-                        ))}
-                      </div>
+                          ))}
+
+                          {/* A little hack to keep proper spacing between the last list item and the bottom border of the card container */}
+                          <div className="h-px" />
+                        </div>
+                      </Card>
                       <div className="flex justify-end items-center gap-4">
                         <div className="flex items-center gap-2">
                           <Label
@@ -1136,8 +1112,11 @@ export default function App() {
               </ResizablePanel>
             </ResizablePanelGroup>
           </ResizablePanel>
-          <ResizableHandle withHandle />
-          <ResizablePanel defaultSize={50} className="p-4 !overflow-y-auto">
+          <ResizableHandle withHandle className="bg-primary/25" />
+          <ResizablePanel
+            defaultSize={50}
+            className="p-4 !overflow-y-auto scrollbar-hidden"
+          >
             {/* Right Half - Canvas */}
             <div className="h-full">
               <Card className="flex flex-col h-full border-none shadow-none gap-4 py-5">
@@ -1158,9 +1137,9 @@ export default function App() {
                 </CardHeader>
                 <CardContent className="flex flex-1 flex-col gap-3">
                   <Textarea
-                    placeholder="Generated response will appear here..."
-                    className="flex-1 min-h-[400px] resize-none"
-                    defaultValue="This is where the AI-generated response will be displayed. The user can manually edit this content as needed."
+                    value={canvas}
+                    className="flex-1 resize-none scrollbar-hidden field-sizing-fixed"
+                    onChange={(e) => setCanvas(e.target.value)}
                   />
                   <div className="flex justify-end gap-2">
                     <RefinePopover />
