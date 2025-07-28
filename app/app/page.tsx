@@ -489,7 +489,7 @@ const FileUploader = ({ onAddFiles }: FileUploaderProps) => {
       { id: 1, name: "flowchart.jpg" },
       { id: 2, name: "financials.pdf" },
     ])
-    setIsOpen(false) // Close popover after adding
+    setIsOpen(false)
   }
 
   return (
