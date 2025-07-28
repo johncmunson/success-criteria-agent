@@ -411,12 +411,14 @@ interface ResultIndicatorProps {
   result: "pass" | "fail" | null
   score: number | null
   reasoning: string | null
+  className?: string
 }
 
 const ResultIndicator = ({
   result,
   score,
   reasoning,
+  className = ''
 }: ResultIndicatorProps) => {
   const icon =
     result === "pass" ? (
@@ -429,7 +431,7 @@ const ResultIndicator = ({
 
   if (!result) {
     return (
-      <Button variant="ghost" size="icon" className="h-8 w-8" disabled>
+      <Button variant="ghost" size="icon" className={cn("h-8 w-8", className)} disabled>
         {icon}
       </Button>
     )
@@ -438,7 +440,7 @@ const ResultIndicator = ({
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-8 w-8">
+        <Button variant="ghost" size="icon" className={cn("h-8 w-8", className)}>
           {icon}
         </Button>
       </PopoverTrigger>
@@ -1104,6 +1106,7 @@ export default function App() {
                           result={overallResult.result}
                           score={overallResult.score}
                           reasoning={overallResult.reasoning}
+                          className="mr-4"
                         />
                       </div>
                     </CardContent>
