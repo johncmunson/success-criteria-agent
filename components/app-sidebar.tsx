@@ -60,7 +60,7 @@ const filesAndFolders = [
     type: "file",
   },
   {
-    title: "Groceries",
+    title: "Groceries, Shopping, and Errands",
     icon: FileText,
     type: "file",
   },
@@ -115,7 +115,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </div>
       </SidebarHeader>
 
-      <SidebarContent>
+      <SidebarContent className="overflow-x-hidden overflow-y-auto">
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
