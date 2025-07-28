@@ -2,5 +2,12 @@
   "name": "Node.js Development Container",
   "image": "node:22",
   "remoteUser": "root",
-  "postCreateCommand": "npm install -g @google/gemini-cli"
+  "postCreateCommand": "npm install -g @google/gemini-cli",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "csstools.postcss" // so that there's not a bunch of warnings in globals.css
+      ]
+    }
+  }
 }

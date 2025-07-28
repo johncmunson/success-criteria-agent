@@ -110,7 +110,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarHeader>
         <div className="px-2 py-2">
           <h1 className="text-lg font-semibold text-sidebar-foreground">
-            Acme Inc.
+            Iterative Canvas
           </h1>
         </div>
       </SidebarHeader>
