@@ -65,7 +65,7 @@ const filesAndFolders = [
     type: "file",
   },
   {
-    title: "Web App",
+    title: "Lesson Plan",
     icon: FileText,
     type: "file",
     isActive: true,

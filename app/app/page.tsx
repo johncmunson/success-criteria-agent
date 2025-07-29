@@ -171,7 +171,7 @@ const RunButton = ({
   loading,
   tooltipText,
   onRunClick,
-  onRunWithoutEvalClick
+  onRunWithoutEvalClick,
 }: {
   disabled: boolean
   loading: boolean
@@ -189,7 +189,11 @@ const RunButton = ({
         disabled={disabled}
         onClick={onRunClick}
       >
-        {!loading ? <Send className="h-4 w-4" /> : <Loader2 className="h-4 w-4 animate-spin" />}
+        {!loading ? (
+          <Send className="h-4 w-4" />
+        ) : (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        )}
       </Button>
       <Separator orientation="vertical" className="h-4 bg-white/20" />
       <DropdownMenu>
@@ -654,14 +658,20 @@ export default function App() {
     }
   }
 
-  const { completion, input, handleInputChange, handleSubmit, isLoading, error } =
-    useCompletion({
-      api: "/api/generate-response",
-    })
+  const {
+    completion,
+    input,
+    handleInputChange,
+    handleSubmit,
+    isLoading,
+    error,
+  } = useCompletion({
+    api: "/api/generate-response",
+  })
 
   useEffect(() => {
-  if (completion) setCanvas(completion)
-}, [completion])
+    if (completion) setCanvas(completion)
+  }, [completion])
 
   const models = [
     "gpt-4o",
