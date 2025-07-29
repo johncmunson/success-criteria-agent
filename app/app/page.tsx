@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useEffect, useState, useCallback } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useCompletion } from "@ai-sdk/react"
 import {
   Archive,
@@ -31,6 +31,7 @@ import {
   BatteryFull,
   BatteryLow,
   Paperclip,
+  Minimize2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -75,6 +76,10 @@ import {
   ResizablePanel,
   ResizableHandle,
 } from "@/components/ui/resizable"
+import {
+  ImperativePanelGroupHandle,
+  ImperativePanelHandle,
+} from "react-resizable-panels"
 
 const actionButtons = [
   { icon: History, label: "History" },
@@ -163,10 +168,16 @@ const initialRequirements: Requirement[] = [
 
 const RunButton = ({
   disabled,
+  loading,
   tooltipText,
+  onRunClick,
+  onRunWithoutEvalClick
 }: {
   disabled: boolean
+  loading: boolean
   tooltipText: string
+  onRunClick: () => void
+  onRunWithoutEvalClick: () => void
 }) => {
   const buttonGroup = (
     <div
@@ -176,8 +187,9 @@ const RunButton = ({
       <Button
         className="rounded-r-none bg-primary hover:bg-primary/90 h-8 disabled:bg-primary/50 disabled:cursor-not-allowed"
         disabled={disabled}
+        onClick={onRunClick}
       >
-        <Send className="h-4 w-4" />
+        {!loading ? <Send className="h-4 w-4" /> : <Loader2 className="h-4 w-4 animate-spin" />}
       </Button>
       <Separator orientation="vertical" className="h-4 bg-white/20" />
       <DropdownMenu>
@@ -191,7 +203,7 @@ const RunButton = ({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem>
+          <DropdownMenuItem onClick={onRunWithoutEvalClick}>
             Run Without Evaluating Requirements
           </DropdownMenuItem>
         </DropdownMenuContent>
@@ -199,7 +211,7 @@ const RunButton = ({
     </div>
   )
 
-  if (disabled) {
+  if (disabled && !loading) {
     return (
       <TooltipProvider>
         <Tooltip>
@@ -329,7 +341,10 @@ const RefinePopover = () => {
           <div className="flex justify-end">
             <RunButton
               disabled={isDisabled}
+              loading={false}
               tooltipText="Select at least one element to refine."
+              onRunClick={() => {}}
+              onRunWithoutEvalClick={() => {}}
             />
           </div>
         </div>
@@ -418,7 +433,7 @@ const ResultIndicator = ({
   result,
   score,
   reasoning,
-  className = ''
+  className = "",
 }: ResultIndicatorProps) => {
   const icon =
     result === "pass" ? (
@@ -431,7 +446,12 @@ const ResultIndicator = ({
 
   if (!result) {
     return (
-      <Button variant="ghost" size="icon" className={cn("h-8 w-8", className)} disabled>
+      <Button
+        variant="ghost"
+        size="icon"
+        className={cn("h-8 w-8", className)}
+        disabled
+      >
         {icon}
       </Button>
     )
@@ -440,7 +460,11 @@ const ResultIndicator = ({
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="icon" className={cn("h-8 w-8", className)}>
+        <Button
+          variant="ghost"
+          size="icon"
+          className={cn("h-8 w-8", className)}
+        >
           {icon}
         </Button>
       </PopoverTrigger>
@@ -563,7 +587,6 @@ const ToolsPopover = ({ enabledTools, onToolChange }: ToolsPopoverProps) => {
 }
 
 export default function App() {
-  const [prompt, setPrompt] = useState("")
   const [canvas, setCanvas] = useState("")
   const [selectedModel, setSelectedModel] = useState("gpt-4o")
   const [requirements, setRequirements] = useState(initialRequirements)
@@ -582,10 +605,63 @@ export default function App() {
     webSearch: false,
   })
 
-  const { completion, input, handleInputChange, handleSubmit, isLoading } =
+  const [promptPanelCollapsed, setPromptPanelCollapsed] = useState(false)
+  const [requirementsPanelCollapsed, setRequirementsPanelCollapsed] =
+    useState(false)
+  const [
+    promptRequirementsPanelCollapsed,
+    setPromptRequirementsPanelCollapsed,
+  ] = useState(false)
+
+  const firstPanelGroupRef = useRef<ImperativePanelGroupHandle>(null)
+  const secondPanelGroupRef = useRef<ImperativePanelGroupHandle>(null)
+  const promptPanelRef = useRef<ImperativePanelHandle>(null)
+  const requirementsPanelRef = useRef<ImperativePanelHandle>(null)
+  const promptRequirementsPanelRef = useRef<ImperativePanelHandle>(null)
+  const canvasPanelRef = useRef<ImperativePanelHandle>(null)
+
+  const maximizePromptPanel = () => {
+    const requirementsPanel = requirementsPanelRef.current
+    const canvasPanel = canvasPanelRef.current
+    if (requirementsPanel && canvasPanel) {
+      requirementsPanel.collapse()
+      canvasPanel.collapse()
+    }
+  }
+
+  const maximizeRequirementsPanel = () => {
+    const promptPanel = promptPanelRef.current
+    const canvasPanel = canvasPanelRef.current
+    if (promptPanel && canvasPanel) {
+      promptPanel.collapse()
+      canvasPanel.collapse()
+    }
+  }
+
+  const maximizeCanvasPanel = () => {
+    const promptRequirementsPanel = promptRequirementsPanelRef.current
+    if (promptRequirementsPanel) {
+      promptRequirementsPanel.collapse()
+    }
+  }
+
+  const resetPanelsLayout = () => {
+    const firstPanelGroup = firstPanelGroupRef.current
+    const secondPanelGroup = secondPanelGroupRef.current
+    if (firstPanelGroup && secondPanelGroup) {
+      firstPanelGroup.setLayout([50, 50])
+      secondPanelGroup.setLayout([50, 50])
+    }
+  }
+
+  const { completion, input, handleInputChange, handleSubmit, isLoading, error } =
     useCompletion({
       api: "/api/generate-response",
     })
+
+  useEffect(() => {
+  if (completion) setCanvas(completion)
+}, [completion])
 
   const models = [
     "gpt-4o",
@@ -762,12 +838,25 @@ export default function App() {
             ))}
           </div>
         </header>
-        <ResizablePanelGroup direction="horizontal" className="flex-1">
-          <ResizablePanel defaultSize={50} className="scrollbar-hidden">
-            <ResizablePanelGroup direction="vertical">
+        <ResizablePanelGroup
+          direction="horizontal"
+          className="flex-1"
+          ref={firstPanelGroupRef}
+        >
+          <ResizablePanel
+            defaultSize={50}
+            className="scrollbar-hidden"
+            ref={promptRequirementsPanelRef}
+            collapsible={true}
+            onResize={(size) => setPromptRequirementsPanelCollapsed(size === 0)}
+          >
+            <ResizablePanelGroup direction="vertical" ref={secondPanelGroupRef}>
               <ResizablePanel
                 defaultSize={50}
                 className="p-4 !overflow-y-auto scrollbar-hidden"
+                ref={promptPanelRef}
+                collapsible={true}
+                onResize={(size) => setPromptPanelCollapsed(size === 0)}
               >
                 {/* User Prompt Section */}
                 <div className="h-full">
@@ -791,16 +880,34 @@ export default function App() {
                           <Copy className="h-4 w-4" />
                           <span className="sr-only">Copy</span>
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <Maximize2 className="h-4 w-4" />
-                          <span className="sr-only">Full Screen</span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={
+                            requirementsPanelCollapsed
+                              ? resetPanelsLayout
+                              : maximizeRequirementsPanel
+                          }
+                        >
+                          {requirementsPanelCollapsed ? (
+                            <Minimize2 className="h-4 w-4" />
+                          ) : (
+                            <Maximize2 className="h-4 w-4" />
+                          )}
+                          <span className="sr-only">
+                            {requirementsPanelCollapsed
+                              ? "Restore"
+                              : "Full Screen"}
+                          </span>
                         </Button>
                       </div>
                     </CardHeader>
                     <CardContent className="flex flex-1 flex-col relative">
                       <Textarea
-                        value={prompt}
-                        onChange={(e) => setPrompt(e.target.value)}
+                        value={input}
+                        placeholder="Enter your prompt here..."
+                        onChange={handleInputChange}
                         className="flex-1 resize-none pb-16 scrollbar-hidden field-sizing-fixed"
                       />
                       <div className="absolute py-2 bottom-px left-6 right-6 mx-2 flex items-center justify-between bg-background/95">
@@ -835,8 +942,11 @@ export default function App() {
                           ))}
                         </div>
                         <RunButton
-                          disabled={!prompt}
+                          disabled={!input || isLoading}
+                          loading={isLoading}
                           tooltipText="Please enter a prompt to run."
+                          onRunClick={handleSubmit}
+                          onRunWithoutEvalClick={() => {}}
                         />
                       </div>
                     </CardContent>
@@ -847,6 +957,9 @@ export default function App() {
               <ResizablePanel
                 defaultSize={50}
                 className="p-4 !overflow-y-auto scrollbar-hidden"
+                ref={requirementsPanelRef}
+                collapsible={true}
+                onResize={(size) => setRequirementsPanelCollapsed(size === 0)}
               >
                 {/* Requirements Section */}
                 <div className="h-full">
@@ -860,9 +973,24 @@ export default function App() {
                           <Sparkles className="h-4 w-4" />
                           <span className="sr-only">Improve Prompt</span>
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <Maximize2 className="h-4 w-4" />
-                          <span className="sr-only">Full Screen</span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={
+                            promptPanelCollapsed
+                              ? resetPanelsLayout
+                              : maximizePromptPanel
+                          }
+                        >
+                          {promptPanelCollapsed ? (
+                            <Minimize2 className="h-4 w-4" />
+                          ) : (
+                            <Maximize2 className="h-4 w-4" />
+                          )}
+                          <span className="sr-only">
+                            {promptPanelCollapsed ? "Restore" : "Full Screen"}
+                          </span>
                         </Button>
                       </div>
                     </CardHeader>
@@ -1056,7 +1184,6 @@ export default function App() {
                               </div>
                             </div>
                           ))}
-
                           {/* A little hack to keep proper spacing between the last list item and the bottom border of the card container */}
                           <div className="h-px" />
                         </div>
@@ -1119,6 +1246,8 @@ export default function App() {
           <ResizablePanel
             defaultSize={50}
             className="p-4 !overflow-y-auto scrollbar-hidden"
+            ref={canvasPanelRef}
+            collapsible={true}
           >
             {/* Right Half - Canvas */}
             <div className="h-full">
@@ -1132,9 +1261,26 @@ export default function App() {
                       <Copy className="h-4 w-4" />
                       <span className="sr-only">Copy</span>
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8">
-                      <Maximize2 className="h-4 w-4" />
-                      <span className="sr-only">Full Screen</span>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={
+                        promptRequirementsPanelCollapsed
+                          ? resetPanelsLayout
+                          : maximizeCanvasPanel
+                      }
+                    >
+                      {promptRequirementsPanelCollapsed ? (
+                        <Minimize2 className="h-4 w-4" />
+                      ) : (
+                        <Maximize2 className="h-4 w-4" />
+                      )}
+                      <span className="sr-only">
+                        {promptRequirementsPanelCollapsed
+                          ? "Restore"
+                          : "Full Screen"}
+                      </span>
                     </Button>
                   </div>
                 </CardHeader>
