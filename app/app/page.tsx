@@ -110,12 +110,12 @@ type Requirement = {
 const initialRequirements: Requirement[] = [
   {
     id: 1,
-    text: "Response should be under 500 words",
+    text: "The content is suitable for high school freshmen or sophomores with little to no programming experience.",
     weight: 1,
-    type: "pass-fail",
-    threshold: 0,
+    type: "subjective",
+    threshold: 0.75,
     model: "gpt-4o",
-    required: false,
+    required: true,
     fitToContent: false,
     loading: false,
     result: null,
@@ -124,12 +124,12 @@ const initialRequirements: Requirement[] = [
   },
   {
     id: 2,
-    text: "Include practical examples",
+    text: "Monday through Friday, with two 1-hour sessions each day",
     weight: 1,
-    type: "subjective",
-    threshold: 0.5,
+    type: "pass-fail",
+    threshold: 1,
     model: "gpt-4o",
-    required: false,
+    required: true,
     fitToContent: false,
     loading: false,
     result: null,
@@ -138,10 +138,24 @@ const initialRequirements: Requirement[] = [
   },
   {
     id: 3,
-    text: "Response should be under 500 words",
+    text: "Morning sessions focus on theory and concepts",
     weight: 1,
-    type: "pass-fail",
-    threshold: 0,
+    type: "subjective",
+    threshold: 0.8,
+    model: "gpt-4o",
+    required: true,
+    fitToContent: false,
+    loading: false,
+    result: null,
+    score: null,
+    reasoning: null,
+  },
+  {
+    id: 4,
+    text: "Afternoon sessions focus on practical exercises and projects that reinforce the concepts learned in the morning",
+    weight: 1,
+    type: "subjective",
+    threshold: 0.8,
     model: "gpt-4o",
     required: false,
     fitToContent: false,
@@ -151,11 +165,25 @@ const initialRequirements: Requirement[] = [
     reasoning: null,
   },
   {
-    id: 4,
-    text: "Include practical examples",
+    id: 5,
+    text: "The curriculum is built around JavaScript, HTML, and CSS",
     weight: 1,
     type: "subjective",
-    threshold: 0.5,
+    threshold: 0.8,
+    model: "gpt-4o",
+    required: false,
+    fitToContent: false,
+    loading: false,
+    result: null,
+    score: null,
+    reasoning: null,
+  },
+  {
+    id: 6,
+    text: "Course is structured to gradually build on concepts, starting with basic programming principles and moving towards more complex topics",
+    weight: 1,
+    type: "subjective",
+    threshold: 0.8,
     model: "gpt-4o",
     required: false,
     fitToContent: false,
@@ -832,7 +860,7 @@ export default function App() {
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 h-4" />
           <div className="flex flex-1 items-center gap-2">
-            <h1 className="text-lg font-semibold">Web App • v2</h1>
+            <h1 className="text-lg font-semibold">Lesson Plan • v2</h1>
           </div>
           <div className="flex items-center gap-1">
             {actionButtons.map((button, index) => (
@@ -918,7 +946,7 @@ export default function App() {
                         value={input}
                         placeholder="Enter your prompt here..."
                         onChange={handleInputChange}
-                        className="flex-1 resize-none pb-16 scrollbar-hidden field-sizing-fixed"
+                        className="flex-1 resize-none pb-16 field-sizing-fixed"
                       />
                       <div className="absolute py-2 bottom-px left-6 right-6 mx-2 flex items-center justify-between bg-background/95">
                         <div className="flex items-center gap-1">
@@ -1260,7 +1288,7 @@ export default function App() {
             collapsible={true}
           >
             {/* Right Half - Canvas */}
-            <div className="h-full">
+            <div className="h-full min-w-64">
               <Card className="flex flex-col h-full border-none shadow-none gap-4 py-5">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-base font-medium">
@@ -1297,7 +1325,7 @@ export default function App() {
                 <CardContent className="flex flex-1 flex-col gap-3">
                   <Textarea
                     value={canvas}
-                    className="flex-1 resize-none scrollbar-hidden field-sizing-fixed"
+                    className="flex-1 resize-none field-sizing-fixed"
                     onChange={(e) => setCanvas(e.target.value)}
                   />
                   <div className="flex justify-end gap-2">

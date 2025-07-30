@@ -122,6 +122,12 @@
   body {
     @apply bg-background text-foreground;
   }
+
+  /* Use thin scrollbars */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: auto;
+  }
 }
 
 @utility scrollbar-hidden {
