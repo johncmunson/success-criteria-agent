@@ -1325,6 +1325,7 @@ export default function App() {
                 <CardContent className="flex flex-1 flex-col gap-3">
                   <Textarea
                     value={canvas}
+                    placeholder="The generated response will appear here..."
                     className="flex-1 resize-none field-sizing-fixed"
                     onChange={(e) => setCanvas(e.target.value)}
                   />
