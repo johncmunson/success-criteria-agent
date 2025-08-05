@@ -1,15 +1,18 @@
-import { drizzle as drizzleNeon } from 'drizzle-orm/neon-serverless';
-import { drizzle as drizzlePg } from 'drizzle-orm/node-postgres';
+import { drizzle as drizzleNeon } from "drizzle-orm/neon-serverless"
+import { drizzle as drizzlePg } from "drizzle-orm/node-postgres"
 
-import { Pool as NeonPool, neonConfig } from '@neondatabase/serverless';
-import { Pool as PgPool } from 'pg';
-import ws from 'ws';
+import { Pool as NeonPool, neonConfig } from "@neondatabase/serverless"
+import { Pool as PgPool } from "pg"
+import ws from "ws"
 
-import * as schema from './schema';
+import * as schema from "./schema"
 
-type DrizzleDb = ReturnType<typeof drizzleNeon> | ReturnType<typeof drizzlePg>;
+type DrizzleDb = ReturnType<typeof drizzleNeon> | ReturnType<typeof drizzlePg>
 
-const dbCache = new WeakMap<Request, { db: DrizzleDb; cleanup: () => Promise<void> }>();
+const dbCache = new WeakMap<
+  Request,
+  { db: DrizzleDb; cleanup: () => Promise<void> }
+>()
 
 /**
  * getDb dynamically chooses the appropriate database driver and returns a Drizzle-ORM instance
@@ -38,63 +41,69 @@ const dbCache = new WeakMap<Request, { db: DrizzleDb; cleanup: () => Promise<voi
  *   conserve resources, but increase latency if new connections need to be opened.
  */
 export function getDb(req: Request): {
-  db: DrizzleDb;
-  cleanup: () => Promise<void>;
+  db: DrizzleDb
+  cleanup: () => Promise<void>
 } {
-  if (dbCache.has(req)) return dbCache.get(req)!;
+  if (dbCache.has(req)) return dbCache.get(req)!
 
-  const useNeon = process.env.USE_NEON === 'true';
-  const connectionString = process.env.DATABASE_URL!;
-  const maxConnections = parseInt(process.env.DB_MAX_CONNECTIONS || '3', 10);
-  const idleTimeoutMs = parseInt(process.env.DB_IDLE_TIMEOUT_MS || '10000', 10);
+  const useNeon = process.env.USE_NEON === "true"
+  const connectionString = process.env.DATABASE_URL!
+  const maxConnections = parseInt(process.env.DB_MAX_CONNECTIONS || "3", 10)
+  const idleTimeoutMs = parseInt(process.env.DB_IDLE_TIMEOUT_MS || "10000", 10)
 
-  let db: DrizzleDb;
-  let cleanup: () => Promise<void>;
-  let pool: NeonPool | PgPool;
+  let db: DrizzleDb
+  let cleanup: () => Promise<void>
+  let pool: NeonPool | PgPool
 
   if (useNeon) {
-    neonConfig.webSocketConstructor = ws;
+    neonConfig.webSocketConstructor = ws
 
     pool = new NeonPool({
       connectionString,
       max: maxConnections,
       idleTimeoutMillis: idleTimeoutMs,
-    });
+    })
 
-    db = drizzleNeon(pool as NeonPool, { schema });
+    db = drizzleNeon(pool as NeonPool, { schema, casing: "snake_case" })
     cleanup = async () => await pool.end()
   } else {
     pool = new PgPool({
       connectionString,
       max: maxConnections,
       idleTimeoutMillis: idleTimeoutMs,
-    });
+    })
 
-    db = drizzlePg(pool as PgPool, { schema });
-    cleanup = async () => await pool.end();
+    db = drizzlePg(pool as PgPool, { schema })
+    cleanup = async () => await pool.end()
   }
 
-  dbCache.set(req, { db, cleanup });
+  dbCache.set(req, { db, cleanup })
   return {
     db,
-    cleanup
-  };
+    cleanup,
+  }
 }
 
 type RouteHandlerContext<
-  P extends Record<string, string | string[] | undefined> = Record<string, string | string[] | undefined>
+  P extends Record<string, string | string[] | undefined> = Record<
+    string,
+    string | string[] | undefined
+  >,
 > = {
-  params: Promise<P>;
-};
+  params: Promise<P>
+}
 
 type HandlerWithDb<
-  P extends Record<string, string | string[] | undefined> = Record<string, string | string[] | undefined>,
-  T = Response
+  P extends Record<string, string | string[] | undefined> = Record<
+    string,
+    string | string[] | undefined
+  >,
+  T = Response,
 > = (params: {
-  db: DrizzleDb;
-  req: Request;
-  context?: RouteHandlerContext<P>;
-}) => Promise<T>;
+  db: DrizzleDb
+  req: Request
+  context?: RouteHandlerContext<P>
+}) => Promise<T>
 
 /**
  * withDb is a higher-order function for Next.js route handlers that ensures
@@ -119,18 +128,22 @@ type HandlerWithDb<
  * });
  */
 export function withDb<
-  P extends Record<string, string | string[] | undefined> = Record<string, string | string[] | undefined>,
-  T = Response
->(
-  handler: HandlerWithDb<P, T>
-) {
-  return async function (req: Request, context?: RouteHandlerContext<P>): Promise<T> {
-    const { db, cleanup } = getDb(req);
+  P extends Record<string, string | string[] | undefined> = Record<
+    string,
+    string | string[] | undefined
+  >,
+  T = Response,
+>(handler: HandlerWithDb<P, T>) {
+  return async function (
+    req: Request,
+    context?: RouteHandlerContext<P>,
+  ): Promise<T> {
+    const { db, cleanup } = getDb(req)
 
     try {
-      return await handler({ db, req, context });
+      return await handler({ db, req, context })
     } finally {
-      await cleanup();
+      await cleanup()
     }
-  };
+  }
 }
