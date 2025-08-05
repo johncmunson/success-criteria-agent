@@ -12,12 +12,33 @@ import {
   text,
 } from "drizzle-orm/pg-core"
 
-/*
--- ENUMs are used here for simplicity and type safety during early development.
--- They're ideal for static or rarely-changing values.
--- In the future, consider replacing frequently updated enums (like model names or tool types)
--- with lookup tables to support easier updates and richer metadata.
-*/
+/**
+ * TODO: DOUBLE CHECK THIS BEHAVIOR
+ * The `timestamps` object adds `createdAt` and `updatedAt` columns to your tables:
+ * - `createdAt` is set automatically on insert.
+ * - `updatedAt` is set automatically on insert and on every update (handled by Drizzle).
+ * Most of the time, your app code doesn't need to worry about these—Drizzle manages them for you.
+ * If you update rows outside Drizzle (like in a DB GUI), you'll need to set `updatedAt` manually.
+ */
+const timestamps = {
+  createdAt: timestamp({ withTimezone: true })
+    // The db engine creates a new timestamp on row insert
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp({ withTimezone: true })
+    // The db engine creates a new timestamp on row insert
+    .defaultNow()
+    // Drizzle creates a new timestamp on row insert or row update
+    .$onUpdateFn(() => new Date())
+    .notNull(),
+}
+
+/**
+ * ENUMs are used here for simplicity and type safety during early development.
+ * They're ideal for static or rarely-changing values.
+ * In the future, consider replacing frequently updated enums (like model names or tool types)
+ * with lookup tables to support easier updates and richer metadata.
+ */
 export const requirementTypeEnum = pgEnum("requirement_type_enum", [
   "pass_fail",
   "subjective",
@@ -64,40 +85,30 @@ export const verificationTypeEnum = pgEnum("verification_type_enum", [
   "password_reset",
 ])
 
-/*
--- Users of the application. Each user may own folders, canvases, and sessions, among other things.
-*/
+/**
+ * Users of the application. Each user may own folders, canvases, and sessions, among other things.
+ */
 export const users = pgTable("users", {
-  id: serial("id").primaryKey(),
-  name: varchar("name").notNull(),
-  email: varchar("email").unique().notNull(),
-  emailVerified: boolean("email_verified").notNull().default(false),
+  id: serial().primaryKey(),
+  name: varchar().notNull(),
+  email: varchar().unique().notNull(),
+  emailVerified: boolean().notNull().default(false),
   // Optional profile image from OAuth provider. Could also allow the user
   // to upload their own photo.
-  image: varchar("image"),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  image: varchar(),
+  ...timestamps,
 })
 
-/*
--- Folders are user-scoped and allow users to organize their canvases.
-*/
+/**
+ * Folders are user-scoped and allow users to organize their canvases.
+ */
 export const folders = pgTable(
   "folders",
   {
-    id: serial("id").primaryKey(),
-    userId: integer("user_id"),
-    name: varchar("name").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    id: serial().primaryKey(),
+    userId: integer(),
+    name: varchar().notNull(),
+    ...timestamps,
   },
   (table) => [
     foreignKey({
@@ -108,22 +119,17 @@ export const folders = pgTable(
   ],
 )
 
-/*
--- A canvas is the top-level concept where users work on prompt + requirement + response sets.
-*/
+/**
+ * A canvas is the top-level concept where users work on prompt + requirement + response sets.
+ */
 export const canvases = pgTable(
   "canvases",
   {
-    id: serial("id").primaryKey(),
-    userId: integer("user_id").notNull(),
-    folderId: integer("folder_id"),
-    name: varchar("name").notNull().default("Untitled"),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    id: serial().primaryKey(),
+    userId: integer().notNull(),
+    folderId: integer(),
+    name: varchar().notNull().default("Untitled"),
+    ...timestamps,
   },
   (table) => [
     foreignKey({
@@ -131,11 +137,11 @@ export const canvases = pgTable(
       foreignColumns: [users.id],
       name: "canvases_user_id_fkey",
     }).onDelete("cascade"),
-    /*
-    -- When a folder is deleted, that will cascade to all canvases within the folder and delete them too.
-    -- Therefore, the user should be warned of this fact when deleting a folder and given the option to
-    -- first migrate their files to the root level or to another folder.
-    */
+    /**
+     * When a folder is deleted, that will cascade to all canvases within the folder and delete them too.
+     * Therefore, the user should be warned of this fact when deleting a folder and given the option to
+     * first migrate their files to the root level or to another folder.
+     */
     foreignKey({
       columns: [table.folderId],
       foreignColumns: [folders.id],
@@ -144,27 +150,23 @@ export const canvases = pgTable(
   ],
 )
 
-/*
--- Each canvas_version represents either a draft (being edited) or an immutable saved snapshot of a canvas.
--- A draft becomes a version when finalized. Versions are immutable once saved.
--- The very first draft or version has no parent_version_id.
--- 
--- This schema design supports both linear versioning and branching.
-*/
+/**
+ * Each canvas_version represents either a draft (being edited) or an immutable saved snapshot of a canvas.
+ * A draft becomes a version when finalized. Versions are immutable once saved.
+ * The very first draft or version has no parent_version_id.
+ *
+ * This schema design supports both linear versioning and branching.
+ */
 export const canvasVersions = pgTable(
   "canvas_versions",
   {
-    id: serial("id").primaryKey(),
-    canvasId: integer("canvas_id").notNull(),
-    parentVersionId: integer("parent_version_id"),
-    name: varchar("name"),
-    isDraft: boolean("is_draft").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    id: serial().primaryKey(),
+    canvasId: integer().notNull(),
+    parentVersionId: integer(),
+    name: varchar(),
+    isDraft: boolean().notNull(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     foreignKey({
@@ -179,7 +181,7 @@ export const canvasVersions = pgTable(
     foreignKey({
       columns: [table.parentVersionId],
       foreignColumns: [table.id],
-      name: "canvas_versions_parent_fkey",
+      name: "canvas_versions_parent_version_id_fkey",
     }).onDelete("cascade"),
   ],
 )
@@ -188,17 +190,13 @@ export const canvasVersions = pgTable(
 -- LLM models supported in the system
 */
 export const models = pgTable("models", {
-  id: serial("id").primaryKey(),
-  name: modelNameEnum("name").notNull().unique(),
-  provider: modelProviderEnum("provider").notNull().default("openai"),
-  supportsReasoningEffort: boolean("supports_reasoning_effort").notNull(),
-  supportsPredictedOutputs: boolean("supports_predicted_outputs").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  id: serial().primaryKey(),
+  name: modelNameEnum().notNull().unique(),
+  provider: modelProviderEnum().notNull().default("openai"),
+  supportsReasoningEffort: boolean().notNull(),
+  supportsPredictedOutputs: boolean().notNull(),
+  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
 })
 
 /*
@@ -207,21 +205,17 @@ export const models = pgTable("models", {
 export const prompts = pgTable(
   "prompts",
   {
-    id: serial("id").primaryKey(),
+    id: serial().primaryKey(),
     /*
     -- One prompt per canvas version. The intent is for this to be a 1:1 relationship, but the schema technically allows for 1:0 (e.g. a parent without a child).
     -- This is typical of SQL, so a true 1:1 relationship must be enforced at the application level.
     */
-    canvasVersionId: integer("canvas_version_id").notNull().unique(),
-    modelId: integer("model_id"),
-    content: varchar("content"),
-    reasoningEffort: reasoningEffortEnum("reasoning_effort"),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    canvasVersionId: integer().notNull().unique(),
+    modelId: integer(),
+    content: varchar(),
+    reasoningEffort: reasoningEffortEnum(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     foreignKey({
@@ -246,15 +240,11 @@ export const prompts = pgTable(
 export const requirementGroups = pgTable(
   "requirement_groups",
   {
-    id: serial("id").primaryKey(),
-    canvasVersionId: integer("canvas_version_id").notNull().unique(),
-    successThreshold: numeric("success_threshold").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    id: serial().primaryKey(),
+    canvasVersionId: integer().notNull().unique(),
+    successThreshold: numeric().notNull(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     foreignKey({
@@ -271,21 +261,17 @@ export const requirementGroups = pgTable(
 export const requirements = pgTable(
   "requirements",
   {
-    id: serial("id").primaryKey(),
-    requirementGroupId: integer("requirement_group_id").notNull(),
-    modelId: integer("model_id"),
-    content: varchar("content"),
-    isRequired: boolean("is_required").notNull().default(true),
-    weight: integer("weight").notNull().default(1),
-    type: requirementTypeEnum("type").notNull().default("pass_fail"),
-    threshold: numeric("threshold"),
-    reasoningEffort: reasoningEffortEnum("reasoning_effort"),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    id: serial().primaryKey(),
+    requirementGroupId: integer().notNull(),
+    modelId: integer(),
+    content: varchar(),
+    isRequired: boolean().notNull().default(true),
+    weight: integer().notNull().default(1),
+    type: requirementTypeEnum().notNull().default("pass_fail"),
+    threshold: numeric(),
+    reasoningEffort: reasoningEffortEnum(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     foreignKey({
@@ -310,20 +296,16 @@ export const requirements = pgTable(
 export const evaluations = pgTable(
   "evaluations",
   {
-    id: serial("id").primaryKey(),
+    id: serial().primaryKey(),
     /*
     -- One evaluation per requirement. Unlike prompts.canvas_version_id, this is a scenario where a 1:0 situation would initially be acceptable
     -- until the user decides to evaluate a requirement for the first time.
     */
-    requirementId: integer("requirement_id").notNull().unique(),
-    score: numeric("score").notNull(), // Normalized score (e.g., 0.0 to 1.0)
-    explanation: varchar("explanation").notNull(), // Model-provided justification for the score
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    requirementId: integer().notNull().unique(),
+    score: numeric().notNull(), // Normalized score (e.g., 0.0 to 1.0)
+    explanation: varchar().notNull(), // Model-provided justification for the score
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     foreignKey({
@@ -340,20 +322,16 @@ export const evaluations = pgTable(
 export const responses = pgTable(
   "responses",
   {
-    id: serial("id").primaryKey(),
+    id: serial().primaryKey(),
     /*
     -- One response per canvas version. See prompts.canvas_version_id for additional notes.
     */
-    canvasVersionId: integer("canvas_version_id").notNull().unique(),
+    canvasVersionId: integer().notNull().unique(),
     // The actual response text. If null, indicates user has never generated a response.
     // If empty string, indicates user has cleared out a previously generated response.
-    content: varchar("content"),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    content: varchar(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     foreignKey({
@@ -382,18 +360,14 @@ export const responses = pgTable(
 export const files = pgTable(
   "files",
   {
-    id: serial("id").primaryKey(),
-    promptId: integer("prompt_id"),
-    name: varchar("name").notNull(),
-    url: varchar("url").notNull(),
-    mimeType: varchar("mime_type").notNull(),
-    fileSize: integer("file_size").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    id: serial().primaryKey(),
+    promptId: integer(),
+    name: varchar().notNull(),
+    url: varchar().notNull(),
+    mimeType: varchar().notNull(),
+    fileSize: integer().notNull(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     foreignKey({
@@ -408,30 +382,22 @@ export const files = pgTable(
 -- Role definitions for access control (e.g., admin, user).
 */
 export const roles = pgTable("roles", {
-  id: serial("id").primaryKey(),
-  name: varchar("name").notNull().unique(),
-  description: varchar("description"),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  id: serial().primaryKey(),
+  name: varchar().notNull().unique(),
+  description: varchar(),
+  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
 })
 
 /*
 -- System-wide permissions that can be attached to roles.
 */
 export const permissions = pgTable("permissions", {
-  id: serial("id").primaryKey(),
-  name: varchar("name").notNull().unique(),
-  description: varchar("description"),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  id: serial().primaryKey(),
+  name: varchar().notNull().unique(),
+  description: varchar(),
+  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
 })
 
 /*
@@ -440,14 +406,10 @@ export const permissions = pgTable("permissions", {
 export const rolePermissions = pgTable(
   "role_permissions",
   {
-    roleId: integer("role_id").notNull(),
-    permissionId: integer("permission_id").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    roleId: integer().notNull(),
+    permissionId: integer().notNull(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     primaryKey({ columns: [table.roleId, table.permissionId] }),
@@ -472,14 +434,10 @@ export const rolePermissions = pgTable(
 export const userRoles = pgTable(
   "user_roles",
   {
-    userId: integer("user_id").notNull(),
-    roleId: integer("role_id").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    userId: integer().notNull(),
+    roleId: integer().notNull(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     primaryKey({ columns: [table.userId, table.roleId] }),
@@ -514,30 +472,26 @@ export const userRoles = pgTable(
 export const accounts = pgTable(
   "accounts",
   {
-    id: serial("id").primaryKey(),
-    userId: integer("user_id").notNull(),
+    id: serial().primaryKey(),
+    userId: integer().notNull(),
     // Provider-specific account or user ID
-    accountId: text("account_id").notNull(),
+    accountId: text().notNull(),
     // The OAuth provider, or 'email_password'
-    provider: authProviderEnum("provider").notNull(),
-    accessToken: text("access_token"),
-    refreshToken: text("refresh_token"),
-    accessTokenExpiresAt: timestamp("access_token_expires_at", {
+    provider: authProviderEnum().notNull(),
+    accessToken: text(),
+    refreshToken: text(),
+    accessTokenExpiresAt: timestamp({
       withTimezone: true,
     }),
-    refreshTokenExpiresAt: timestamp("refresh_token_expires_at", {
+    refreshTokenExpiresAt: timestamp({
       withTimezone: true,
     }),
-    scope: text("scope"),
-    idToken: text("id_token"),
+    scope: text(),
+    idToken: text(),
     // Only for email/password auth
-    password: varchar("password"),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    password: varchar(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     foreignKey({
@@ -567,18 +521,14 @@ export const accounts = pgTable(
 export const sessions = pgTable(
   "sessions",
   {
-    id: serial("id").primaryKey(),
-    userId: integer("user_id").notNull(),
-    token: text("token").notNull().unique(),
-    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-    ipAddress: varchar("ip_address"),
-    userAgent: varchar("user_agent"),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    id: serial().primaryKey(),
+    userId: integer().notNull(),
+    token: text().notNull().unique(),
+    expiresAt: timestamp({ withTimezone: true }).notNull(),
+    ipAddress: varchar(),
+    userAgent: varchar(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     foreignKey({
@@ -595,15 +545,11 @@ export const sessions = pgTable(
 export const tools = pgTable(
   "tools",
   {
-    id: serial("id").primaryKey(),
-    promptId: integer("prompt_id").notNull(),
-    type: toolTypeEnum("type").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    id: serial().primaryKey(),
+    promptId: integer().notNull(),
+    type: toolTypeEnum().notNull(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     foreignKey({
@@ -623,18 +569,14 @@ export const tools = pgTable(
 --    the `expires_at` timestamp, to prevent unnecessary storage accumulation and keep the table clean.
 */
 export const verifications = pgTable("verifications", {
-  id: serial("id").primaryKey(),
-  type: verificationTypeEnum("type").notNull(),
+  id: serial().primaryKey(),
+  type: verificationTypeEnum().notNull(),
   // If verification_type is 'email_verification' or 'password_reset', then this is the user's email.
   // If other strategies are supported in the future, then identifier could be something other than email.
-  identifier: varchar("identifier").notNull(),
+  identifier: varchar().notNull(),
   // The actual code/token
-  value: varchar("value").notNull(),
-  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  value: varchar().notNull(),
+  expiresAt: timestamp({ withTimezone: true }).notNull(),
+  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
 })
