@@ -73,7 +73,7 @@ export function getDb(req: Request): {
       idleTimeoutMillis: idleTimeoutMs,
     })
 
-    db = drizzlePg(pool as PgPool, { schema })
+    db = drizzlePg(pool as PgPool, { schema, casing: "snake_case" })
     cleanup = async () => await pool.end()
   }
 
