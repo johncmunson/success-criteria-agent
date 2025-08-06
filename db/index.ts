@@ -4,8 +4,8 @@ import { drizzle as drizzlePg } from "drizzle-orm/node-postgres"
 import { Pool as NeonPool, neonConfig } from "@neondatabase/serverless"
 import { Pool as PgPool } from "pg"
 import ws from "ws"
-
 import * as schema from "./schema"
+import { getEnvVar } from "@/lib/utils"
 
 type DrizzleDb = ReturnType<typeof drizzleNeon> | ReturnType<typeof drizzlePg>
 
@@ -46,10 +46,10 @@ export function getDb(req: Request): {
 } {
   if (dbCache.has(req)) return dbCache.get(req)!
 
-  const useNeon = process.env.USE_NEON === "true"
-  const connectionString = process.env.DATABASE_URL!
-  const maxConnections = parseInt(process.env.DB_MAX_CONNECTIONS || "3", 10)
-  const idleTimeoutMs = parseInt(process.env.DB_IDLE_TIMEOUT_MS || "10000", 10)
+  const useNeon = getEnvVar("USE_NEON") === "true"
+  const connectionString = getEnvVar("DATABASE_URL")
+  const maxConnections = parseInt(getEnvVar("DB_MAX_CONNECTIONS") || "3", 10)
+  const idleTimeoutMs = parseInt(getEnvVar("DB_IDLE_TIMEOUT_MS") || "10000", 10)
 
   let db: DrizzleDb
   let cleanup: () => Promise<void>

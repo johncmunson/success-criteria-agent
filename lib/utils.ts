@@ -5,6 +5,14 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+export function getEnvVar(name: string): string {
+  const value = process.env[name]
+  if (typeof value === "undefined") {
+    throw new Error(`Missing required environment variable: ${name}`)
+  }
+  return value
+}
+
 export type SoftCriterion = {
   type: "soft"
   score: number // Must be between 0 and 1

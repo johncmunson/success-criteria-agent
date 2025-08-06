@@ -1,12 +1,14 @@
-import './envConfig.ts'
+import "./lib/envConfig.ts"
 import { defineConfig } from "drizzle-kit"
+import { getEnvVar } from "./lib/utils.js"
 
 export default defineConfig({
-  schema: "./db/schema.ts", // path to your schema
+  schema: "./db/schema.ts",
+  out: "./db/migrations",
   dialect: "postgresql",
   dbCredentials: {
     // Option 1
-    url: process.env.DATABASE_URL!,
+    url: getEnvVar("DATABASE_URL"),
     // Option 2
     // host: "host",
     // port: 5432,
