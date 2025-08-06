@@ -108,14 +108,6 @@ export const users = pgTable("users", {
   ...timestamps,
 })
 
-export const usersRelations = relations(users, ({ many }) => ({
-  folders: many(folders),
-  canvases: many(canvases),
-  accounts: many(accounts),
-  sessions: many(sessions),
-  userRoles: many(userRoles),
-}))
-
 /**
  * Folders are user-scoped and allow users to organize their canvases.
  */
@@ -129,14 +121,6 @@ export const folders = pgTable("folders", {
   name: varchar().notNull(),
   ...timestamps,
 })
-
-export const foldersRelations = relations(folders, ({ one, many }) => ({
-  user: one(users, {
-    fields: [folders.userId],
-    references: [users.id],
-  }),
-  canvases: many(canvases),
-}))
 
 /**
  * A canvas is the top-level concept where users work on prompt + requirement + response sets.
@@ -155,18 +139,6 @@ export const canvases = pgTable("canvases", {
   name: varchar().notNull().default("Untitled"),
   ...timestamps,
 })
-
-export const canvasesRelations = relations(canvases, ({ one, many }) => ({
-  user: one(users, {
-    fields: [canvases.userId],
-    references: [users.id],
-  }),
-  folder: one(folders, {
-    fields: [canvases.folderId],
-    references: [folders.id],
-  }),
-  canvasVersions: many(canvasVersions),
-}))
 
 /**
  * Each canvas_version represents either a draft (being edited) or an immutable saved snapshot of a canvas.
@@ -192,30 +164,8 @@ export const canvasVersions = pgTable("canvas_versions", {
   }),
   name: varchar(),
   isDraft: boolean().notNull(),
-  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  ...timestamps,
 })
-
-export const canvasVersionsRelations = relations(
-  canvasVersions,
-  ({ one, many }) => ({
-    canvas: one(canvases, {
-      fields: [canvasVersions.canvasId],
-      references: [canvases.id],
-    }),
-    parentVersion: one(canvasVersions, {
-      fields: [canvasVersions.parentVersionId],
-      references: [canvasVersions.id],
-      relationName: "parentVersion",
-    }),
-    childVersions: many(canvasVersions, {
-      relationName: "parentVersion",
-    }),
-    prompts: many(prompts),
-    requirementGroups: many(requirementGroups),
-    responses: many(responses),
-  }),
-)
 
 /**
  * LLM models supported in the system
@@ -226,8 +176,7 @@ export const models = pgTable("models", {
   provider: modelProviderEnum().notNull().default("openai"),
   supportsReasoningEffort: boolean().notNull(),
   supportsPredictedOutputs: boolean().notNull(),
-  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  ...timestamps,
 })
 
 /**
@@ -249,8 +198,7 @@ export const prompts = pgTable("prompts", {
   }),
   content: varchar(),
   reasoningEffort: reasoningEffortEnum(),
-  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  ...timestamps,
 })
 
 /**
@@ -265,8 +213,7 @@ export const requirementGroups = pgTable("requirement_groups", {
     .notNull()
     .unique(),
   successThreshold: numeric().notNull(),
-  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  ...timestamps,
 })
 
 /**
@@ -289,8 +236,7 @@ export const requirements = pgTable("requirements", {
   type: requirementTypeEnum().notNull().default("pass_fail"),
   threshold: numeric(),
   reasoningEffort: reasoningEffortEnum(),
-  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  ...timestamps,
 })
 
 /**
@@ -310,8 +256,7 @@ export const evaluations = pgTable("evaluations", {
     .unique(),
   score: numeric().notNull(), // Normalized score (e.g., 0.0 to 1.0)
   explanation: varchar().notNull(), // Model-provided justification for the score
-  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  ...timestamps,
 })
 
 /**
@@ -329,8 +274,7 @@ export const responses = pgTable("responses", {
   // The actual response text. If null, indicates user has never generated a response.
   // If empty string, indicates user has cleared out a previously generated response.
   content: varchar(),
-  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  ...timestamps,
 })
 
 /**
@@ -358,8 +302,7 @@ export const files = pgTable("files", {
   url: varchar().notNull(),
   mimeType: varchar().notNull(),
   fileSize: integer().notNull(),
-  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  ...timestamps,
 })
 
 /**
@@ -369,8 +312,7 @@ export const roles = pgTable("roles", {
   id: integer().primaryKey().generatedAlwaysAsIdentity(),
   name: varchar().notNull().unique(),
   description: varchar(),
-  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  ...timestamps,
 })
 
 /**
@@ -380,32 +322,36 @@ export const permissions = pgTable("permissions", {
   id: integer().primaryKey().generatedAlwaysAsIdentity(),
   name: varchar().notNull().unique(),
   description: varchar(),
-  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  ...timestamps,
 })
 
 /**
  * Role to permission mapping (many-to-many). a.k.a. bridge table. Roles can have many permissions, and permissions can be assigned to many roles.
  */
-export const rolePermissions = pgTable(
+export const rolesToPermissions = pgTable(
   "role_permissions",
   {
-    roleId: integer().notNull(),
-    permissionId: integer().notNull(),
-    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    roleId: integer()
+      .references(() => roles.id, {
+        onDelete: "cascade",
+      })
+      .notNull(),
+    permissionId: integer()
+      .references(() => permissions.id, {
+        onDelete: "cascade",
+      })
+      .notNull(),
+    ...timestamps,
   },
   (table) => [
     primaryKey({ columns: [table.roleId, table.permissionId] }),
     foreignKey({
       columns: [table.roleId],
       foreignColumns: [roles.id],
-      name: "role_permissions_role_id_fkey",
     }).onDelete("cascade"),
     foreignKey({
       columns: [table.permissionId],
       foreignColumns: [permissions.id],
-      name: "role_permissions_permission_id_fkey",
     }).onDelete("cascade"),
   ],
 )
@@ -415,27 +361,22 @@ export const rolePermissions = pgTable(
  * The schema specifically does not allow permissions to be assigned directly to users. Users gain their permissions only indirectly
  * via the roles that they are assigned.
  */
-export const userRoles = pgTable(
+export const usersToRoles = pgTable(
   "user_roles",
   {
-    userId: integer().notNull(),
-    roleId: integer().notNull(),
-    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    userId: integer()
+      .references(() => users.id, {
+        onDelete: "cascade",
+      })
+      .notNull(),
+    roleId: integer()
+      .references(() => roles.id, {
+        onDelete: "cascade",
+      })
+      .notNull(),
+    ...timestamps,
   },
-  (table) => [
-    primaryKey({ columns: [table.userId, table.roleId] }),
-    foreignKey({
-      columns: [table.userId],
-      foreignColumns: [users.id],
-      name: "user_roles_user_id_fkey",
-    }).onDelete("cascade"),
-    foreignKey({
-      columns: [table.roleId],
-      foreignColumns: [roles.id],
-      name: "user_roles_role_id_fkey",
-    }).onDelete("cascade"),
-  ],
+  (table) => [primaryKey({ columns: [table.userId, table.roleId] })],
 )
 
 /**
@@ -470,8 +411,7 @@ export const accounts = pgTable("accounts", {
   idToken: text(),
   // Only for email/password auth
   password: varchar(),
-  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  ...timestamps,
 })
 
 /**
@@ -504,8 +444,7 @@ export const sessions = pgTable("sessions", {
   expiresAt: timestamp({ withTimezone: true }).notNull(),
   ipAddress: varchar(),
   userAgent: varchar(),
-  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  ...timestamps,
 })
 
 /*
@@ -519,8 +458,7 @@ export const tools = pgTable("tools", {
     })
     .notNull(),
   type: toolTypeEnum().notNull(),
-  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  ...timestamps,
 })
 
 /**
@@ -540,6 +478,5 @@ export const verifications = pgTable("verifications", {
   // The actual code/token
   value: varchar().notNull(),
   expiresAt: timestamp({ withTimezone: true }).notNull(),
-  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  ...timestamps,
 })
