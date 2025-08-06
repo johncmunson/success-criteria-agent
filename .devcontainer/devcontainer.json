@@ -1,13 +1,54 @@
 {
   "name": "Node.js Development Container",
-  "image": "node:22",
+  "dockerComposeFile": "../docker-compose.yml",
+
+  "service": "node",
+  "workspaceFolder": "/workspace",
   "remoteUser": "root",
-  "postCreateCommand": "npm install -g @google/gemini-cli",
+  // 1. tree is useful to have in the environment so that you can easily provide your file structure to language models
+  // 2. gemini-cli is sometimes useful for simple and boring tasks you want automated
+  "postCreateCommand": "apt-get update && apt-get install -y tree && npm install -g @google/gemini-cli",
   "customizations": {
     "vscode": {
       "extensions": [
-        "csstools.postcss" // so that there's not a bunch of warnings in globals.css
-      ]
+        "csstools.postcss", // so that there's not a bunch of warnings in globals.css
+        "esbenp.prettier-vscode",
+        "dbaeumer.vscode-eslint",
+        "bradlc.vscode-tailwindcss",
+        "mtxr.sqltools",
+        "mtxr.sqltools-driver-pg",
+        "yoavbls.pretty-ts-errors"
+      ],
+      "settings": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.formatOnSave": true,
+        "eslint.format.enable": false,
+        "files.associations": {
+          // Associates all *.css files with Tailwind CSS mode for better syntax highlighting and IntelliSense
+          "*.css": "tailwindcss"
+        },
+        "editor.quickSuggestions": {
+          // Enables Tailwind autocomplete suggestions while typing inside string literals (e.g., className attributes)
+          "strings": "on"
+        },
+        // Enables Emmet-style completions for Tailwind classes, e.g., `div.bg-red-500.uppercase`
+        "tailwindCSS.emmetCompletions": true,
+        "sqltools.autoConnectTo": "postgres",
+        "sqltools.connections": [
+          {
+            "name": "postgres",
+            "driver": "PostgreSQL",
+            // This assumes you're connecting from within the container.
+            // If 'localhost' doesn't work from inside the container, use "host.docker.internal" (on macOS/Windows)
+            // or the Docker service name "postgres" (on Linux-based Docker setups with default networking).
+            "server": "localhost",
+            "port": 5432,
+            "database": "postgres",
+            "username": "postgres",
+            "password": "postgres"
+          }
+        ]
+      }
     }
   }
 }

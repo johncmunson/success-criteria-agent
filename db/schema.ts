@@ -108,6 +108,14 @@ export const users = pgTable("users", {
   ...timestamps,
 })
 
+export const usersRelations = relations(users, ({ many }) => ({
+  folders: many(folders),
+  canvases: many(canvases),
+  accounts: many(accounts),
+  sessions: many(sessions),
+  userRoles: many(usersToRoles),
+}))
+
 /**
  * Folders are user-scoped and allow users to organize their canvases.
  */
@@ -121,6 +129,14 @@ export const folders = pgTable("folders", {
   name: varchar().notNull(),
   ...timestamps,
 })
+
+export const foldersRelations = relations(folders, ({ one, many }) => ({
+  user: one(users, {
+    fields: [folders.userId],
+    references: [users.id],
+  }),
+  canvases: many(canvases),
+}))
 
 /**
  * A canvas is the top-level concept where users work on prompt + requirement + response sets.
@@ -140,6 +156,18 @@ export const canvases = pgTable("canvases", {
   ...timestamps,
 })
 
+export const canvasesRelations = relations(canvases, ({ one, many }) => ({
+  user: one(users, {
+    fields: [canvases.userId],
+    references: [users.id],
+  }),
+  folder: one(folders, {
+    fields: [canvases.folderId],
+    references: [folders.id],
+  }),
+  canvasVersions: many(canvasVersions),
+}))
+
 /**
  * Each canvas_version represents either a draft (being edited) or an immutable saved snapshot of a canvas.
  * A draft becomes a version when finalized. Versions are immutable once saved.
@@ -158,6 +186,12 @@ export const canvasVersions = pgTable("canvas_versions", {
    *
    * Also, since this is a self-referential foreign key, Drizzle requires us to
    * explicitly define the return type of the callback function using AnyPgColumn.
+   *
+   * TODO: If we're gonna start out with a linear versioning system, then we likely
+   * want to add a unique constraint here to ensure that any given canvas version
+   * has at most one child. This would enforce the reflexive one-to-one relationship
+   * inherent in a linear versioning system. If we later decide to move to a branching
+   * versioning system, we can remove this constraint.
    */
   parentVersionId: integer().references((): AnyPgColumn => canvasVersions.id, {
     onDelete: "cascade",
@@ -166,6 +200,27 @@ export const canvasVersions = pgTable("canvas_versions", {
   isDraft: boolean().notNull(),
   ...timestamps,
 })
+
+export const canvasVersionsRelations = relations(
+  canvasVersions,
+  ({ one, many }) => ({
+    canvas: one(canvases, {
+      fields: [canvasVersions.canvasId],
+      references: [canvases.id],
+    }),
+    parentVersion: one(canvasVersions, {
+      fields: [canvasVersions.parentVersionId],
+      references: [canvasVersions.id],
+    }),
+    // TODO: See note above about the unique constraint for linear versioning.
+    // This might need to change to...
+    // one(canvasVersions, { fields: [canvasVersions.id], references: [canvasVersions.parentVersionId] })
+    childVersions: many(canvasVersions),
+    prompt: one(prompts),
+    requirementGroup: one(requirementGroups),
+    response: one(responses),
+  }),
+)
 
 /**
  * LLM models supported in the system
@@ -178,6 +233,11 @@ export const models = pgTable("models", {
   supportsPredictedOutputs: boolean().notNull(),
   ...timestamps,
 })
+
+export const modelsRelations = relations(models, ({ many }) => ({
+  prompts: many(prompts),
+  requirements: many(requirements),
+}))
 
 /**
  * The prompt content for a canvas version, plus optional model configuration if prompt is using tools or using a model that accepts config.
@@ -201,6 +261,19 @@ export const prompts = pgTable("prompts", {
   ...timestamps,
 })
 
+export const promptsRelations = relations(prompts, ({ one, many }) => ({
+  canvasVersion: one(canvasVersions, {
+    fields: [prompts.canvasVersionId],
+    references: [canvasVersions.id],
+  }),
+  model: one(models, {
+    fields: [prompts.modelId],
+    references: [models.id],
+  }),
+  tools: many(tools),
+  files: many(files),
+}))
+
 /**
  * Each canvas version has one group of requirements, used to evaluate the response.
  */
@@ -215,6 +288,17 @@ export const requirementGroups = pgTable("requirement_groups", {
   successThreshold: numeric().notNull(),
   ...timestamps,
 })
+
+export const requirementGroupsRelations = relations(
+  requirementGroups,
+  ({ one, many }) => ({
+    canvasVersion: one(canvasVersions, {
+      fields: [requirementGroups.canvasVersionId],
+      references: [canvasVersions.id],
+    }),
+    requirements: many(requirements),
+  }),
+)
 
 /**
  * Individual requirements for a canvas version, evaluated against the generated response.
@@ -239,6 +323,18 @@ export const requirements = pgTable("requirements", {
   ...timestamps,
 })
 
+export const requirementsRelations = relations(requirements, ({ one }) => ({
+  requirementGroup: one(requirementGroups, {
+    fields: [requirements.requirementGroupId],
+    references: [requirementGroups.id],
+  }),
+  model: one(models, {
+    fields: [requirements.modelId],
+    references: [models.id],
+  }),
+  evaluation: one(evaluations),
+}))
+
 /**
  * The result of a single requirement's evaluation.
  */
@@ -259,6 +355,13 @@ export const evaluations = pgTable("evaluations", {
   ...timestamps,
 })
 
+export const evaluationsRelations = relations(evaluations, ({ one }) => ({
+  requirement: one(requirements, {
+    fields: [evaluations.requirementId],
+    references: [requirements.id],
+  }),
+}))
+
 /**
  * The model-generated response for a canvas version.
  */
@@ -276,6 +379,13 @@ export const responses = pgTable("responses", {
   content: varchar(),
   ...timestamps,
 })
+
+export const responsesRelations = relations(responses, ({ one }) => ({
+  canvasVersion: one(canvasVersions, {
+    fields: [responses.canvasVersionId],
+    references: [canvasVersions.id],
+  }),
+}))
 
 /**
  * Represents files attached to a prompt, such as images or reference documents.
@@ -305,6 +415,13 @@ export const files = pgTable("files", {
   ...timestamps,
 })
 
+export const filesRelations = relations(files, ({ one }) => ({
+  prompt: one(prompts, {
+    fields: [files.promptId],
+    references: [prompts.id],
+  }),
+}))
+
 /**
  * Role definitions for access control (e.g., admin, user).
  */
@@ -315,6 +432,11 @@ export const roles = pgTable("roles", {
   ...timestamps,
 })
 
+export const rolesRelations = relations(roles, ({ many }) => ({
+  rolePermissions: many(rolesToPermissions),
+  userRoles: many(usersToRoles),
+}))
+
 /**
  * System-wide permissions that can be attached to roles.
  */
@@ -324,6 +446,10 @@ export const permissions = pgTable("permissions", {
   description: varchar(),
   ...timestamps,
 })
+
+export const permissionsRelations = relations(permissions, ({ many }) => ({
+  rolePermissions: many(rolesToPermissions),
+}))
 
 /**
  * Role to permission mapping (many-to-many). a.k.a. bridge table. Roles can have many permissions, and permissions can be assigned to many roles.
@@ -343,17 +469,21 @@ export const rolesToPermissions = pgTable(
       .notNull(),
     ...timestamps,
   },
-  (table) => [
-    primaryKey({ columns: [table.roleId, table.permissionId] }),
-    foreignKey({
-      columns: [table.roleId],
-      foreignColumns: [roles.id],
-    }).onDelete("cascade"),
-    foreignKey({
-      columns: [table.permissionId],
-      foreignColumns: [permissions.id],
-    }).onDelete("cascade"),
-  ],
+  (table) => [primaryKey({ columns: [table.roleId, table.permissionId] })],
+)
+
+export const rolesToPermissionsRelations = relations(
+  rolesToPermissions,
+  ({ one }) => ({
+    role: one(roles, {
+      fields: [rolesToPermissions.roleId],
+      references: [roles.id],
+    }),
+    permission: one(permissions, {
+      fields: [rolesToPermissions.permissionId],
+      references: [permissions.id],
+    }),
+  }),
 )
 
 /**
@@ -378,6 +508,17 @@ export const usersToRoles = pgTable(
   },
   (table) => [primaryKey({ columns: [table.userId, table.roleId] })],
 )
+
+export const usersToRolesRelations = relations(usersToRoles, ({ one }) => ({
+  user: one(users, {
+    fields: [usersToRoles.userId],
+    references: [users.id],
+  }),
+  role: one(roles, {
+    fields: [usersToRoles.roleId],
+    references: [roles.id],
+  }),
+}))
 
 /**
  * Connected accounts for login strategies, including both third-party OAuth providers (e.g., Google, GitHub) and native email/password authentication.
@@ -414,6 +555,13 @@ export const accounts = pgTable("accounts", {
   ...timestamps,
 })
 
+export const accountsRelations = relations(accounts, ({ one }) => ({
+  user: one(users, {
+    fields: [accounts.userId],
+    references: [users.id],
+  }),
+}))
+
 /**
  * Authenticated sessions for users.
  *
@@ -447,6 +595,13 @@ export const sessions = pgTable("sessions", {
   ...timestamps,
 })
 
+export const sessionsRelations = relations(sessions, ({ one }) => ({
+  user: one(users, {
+    fields: [sessions.userId],
+    references: [users.id],
+  }),
+}))
+
 /*
  * Tools used during prompt execution, like function-calling plugins.
  */
@@ -460,6 +615,13 @@ export const tools = pgTable("tools", {
   type: toolTypeEnum().notNull(),
   ...timestamps,
 })
+
+export const toolsRelations = relations(tools, ({ one }) => ({
+  prompt: one(prompts, {
+    fields: [tools.promptId],
+    references: [prompts.id],
+  }),
+}))
 
 /**
  * Temporary codes used for verifying emails, resetting passwords, etc.
