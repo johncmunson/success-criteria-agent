@@ -41,7 +41,7 @@
             // This assumes you're connecting from within the container.
             // If 'localhost' doesn't work from inside the container, use "host.docker.internal" (on macOS/Windows)
             // or the Docker service name "postgres" (on Linux-based Docker setups with default networking).
-            "server": "localhost",
+            "server": "postgres",
             "port": 5432,
             "database": "postgres",
             "username": "postgres",
