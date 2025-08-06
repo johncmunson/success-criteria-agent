@@ -1,3 +1,4 @@
+import { relations } from "drizzle-orm"
 import {
   pgEnum,
   pgTable,
@@ -107,6 +108,14 @@ export const users = pgTable("users", {
   ...timestamps,
 })
 
+export const usersRelations = relations(users, ({ many }) => ({
+  folders: many(folders),
+  canvases: many(canvases),
+  accounts: many(accounts),
+  sessions: many(sessions),
+  userRoles: many(userRoles),
+}))
+
 /**
  * Folders are user-scoped and allow users to organize their canvases.
  */
@@ -120,6 +129,14 @@ export const folders = pgTable("folders", {
   name: varchar().notNull(),
   ...timestamps,
 })
+
+export const foldersRelations = relations(folders, ({ one, many }) => ({
+  user: one(users, {
+    fields: [folders.userId],
+    references: [users.id],
+  }),
+  canvases: many(canvases),
+}))
 
 /**
  * A canvas is the top-level concept where users work on prompt + requirement + response sets.
@@ -138,6 +155,18 @@ export const canvases = pgTable("canvases", {
   name: varchar().notNull().default("Untitled"),
   ...timestamps,
 })
+
+export const canvasesRelations = relations(canvases, ({ one, many }) => ({
+  user: one(users, {
+    fields: [canvases.userId],
+    references: [users.id],
+  }),
+  folder: one(folders, {
+    fields: [canvases.folderId],
+    references: [folders.id],
+  }),
+  canvasVersions: many(canvasVersions),
+}))
 
 /**
  * Each canvas_version represents either a draft (being edited) or an immutable saved snapshot of a canvas.
@@ -167,6 +196,27 @@ export const canvasVersions = pgTable("canvas_versions", {
   updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
 })
 
+export const canvasVersionsRelations = relations(
+  canvasVersions,
+  ({ one, many }) => ({
+    canvas: one(canvases, {
+      fields: [canvasVersions.canvasId],
+      references: [canvases.id],
+    }),
+    parentVersion: one(canvasVersions, {
+      fields: [canvasVersions.parentVersionId],
+      references: [canvasVersions.id],
+      relationName: "parentVersion",
+    }),
+    childVersions: many(canvasVersions, {
+      relationName: "parentVersion",
+    }),
+    prompts: many(prompts),
+    requirementGroups: many(requirementGroups),
+    responses: many(responses),
+  }),
+)
+
 /**
  * LLM models supported in the system
  */
@@ -183,139 +233,105 @@ export const models = pgTable("models", {
 /**
  * The prompt content for a canvas version, plus optional model configuration if prompt is using tools or using a model that accepts config.
  */
-export const prompts = pgTable(
-  "prompts",
-  {
-    id: integer().primaryKey().generatedAlwaysAsIdentity(),
-    /**
-     * One prompt per canvas version. The intent is for this to be a 1:1 relationship, but the schema technically allows for 1:0 (e.g. a parent without a child).
-     * This is typical of SQL, so a true 1:1 relationship must be enforced at the application level.
-     */
-    canvasVersionId: integer().notNull().unique(),
-    modelId: integer(),
-    content: varchar(),
-    reasoningEffort: reasoningEffortEnum(),
-    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-  },
-  (table) => [
-    foreignKey({
-      columns: [table.canvasVersionId],
-      foreignColumns: [canvasVersions.id],
-      name: "prompts_canvas_version_id_fkey",
-    }).onDelete("cascade"),
-    // If the model is deleted, null out the reference rather than cascading. The user will have to choose a new model prior to submitting this prompt again.
-    foreignKey({
-      columns: [table.modelId],
-      foreignColumns: [models.id],
-      name: "prompts_model_id_fkey",
-    }).onDelete("set null"),
-  ],
-)
+export const prompts = pgTable("prompts", {
+  id: integer().primaryKey().generatedAlwaysAsIdentity(),
+  /**
+   * One prompt per canvas version. The intent is for this to be a 1:1 relationship, but the schema technically allows for 1:0 (e.g. a parent without a child).
+   * This is typical of SQL, so a true 1:1 relationship must be enforced at the application level.
+   */
+  canvasVersionId: integer()
+    .references(() => canvasVersions.id, { onDelete: "cascade" })
+    .notNull()
+    .unique(),
+  // If the model is deleted, null out the reference rather than cascading. The user will have to choose a new model prior to submitting this prompt again.
+  modelId: integer().references(() => models.id, {
+    onDelete: "set null",
+  }),
+  content: varchar(),
+  reasoningEffort: reasoningEffortEnum(),
+  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+})
 
 /**
  * Each canvas version has one group of requirements, used to evaluate the response.
  */
-export const requirementGroups = pgTable(
-  "requirement_groups",
-  {
-    id: integer().primaryKey().generatedAlwaysAsIdentity(),
-    canvasVersionId: integer().notNull().unique(),
-    successThreshold: numeric().notNull(),
-    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-  },
-  (table) => [
-    foreignKey({
-      columns: [table.canvasVersionId],
-      foreignColumns: [canvasVersions.id],
-      name: "requirement_groups_canvas_version_id_fkey",
-    }).onDelete("cascade"),
-  ],
-)
+export const requirementGroups = pgTable("requirement_groups", {
+  id: integer().primaryKey().generatedAlwaysAsIdentity(),
+  canvasVersionId: integer()
+    .references(() => canvasVersions.id, {
+      onDelete: "cascade",
+    })
+    .notNull()
+    .unique(),
+  successThreshold: numeric().notNull(),
+  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+})
 
 /**
  * Individual requirements for a canvas version, evaluated against the generated response.
  */
-export const requirements = pgTable(
-  "requirements",
-  {
-    id: integer().primaryKey().generatedAlwaysAsIdentity(),
-    requirementGroupId: integer().notNull(),
-    modelId: integer(),
-    content: varchar(),
-    isRequired: boolean().notNull().default(true),
-    weight: integer().notNull().default(1),
-    type: requirementTypeEnum().notNull().default("pass_fail"),
-    threshold: numeric(),
-    reasoningEffort: reasoningEffortEnum(),
-    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-  },
-  (table) => [
-    foreignKey({
-      columns: [table.requirementGroupId],
-      foreignColumns: [requirementGroups.id],
-      name: "requirements_requirement_group_id_fkey",
-    }).onDelete("cascade"),
-    // If the model is deleted, null out the reference rather than cascading. The user will have to choose a new model prior to submitting this prompt again.
-    foreignKey({
-      columns: [table.modelId],
-      foreignColumns: [models.id],
-      name: "requirements_model_id_fkey",
-    }).onDelete("set null"),
-  ],
-)
+export const requirements = pgTable("requirements", {
+  id: integer().primaryKey().generatedAlwaysAsIdentity(),
+  requirementGroupId: integer()
+    .references(() => requirementGroups.id, {
+      onDelete: "cascade",
+    })
+    .notNull(),
+  // If the model is deleted, null out the reference rather than cascading. The user will have to choose a new model prior to submitting this prompt again.
+  modelId: integer().references(() => models.id, {
+    onDelete: "set null",
+  }),
+  content: varchar(),
+  isRequired: boolean().notNull().default(true),
+  weight: integer().notNull().default(1),
+  type: requirementTypeEnum().notNull().default("pass_fail"),
+  threshold: numeric(),
+  reasoningEffort: reasoningEffortEnum(),
+  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+})
 
 /**
  * The result of a single requirement's evaluation.
  */
-export const evaluations = pgTable(
-  "evaluations",
-  {
-    id: integer().primaryKey().generatedAlwaysAsIdentity(),
-    /**
-     * One evaluation per requirement. Unlike prompts.canvas_version_id, this is a scenario where a 1:0 situation would initially be acceptable
-     * until the user decides to evaluate a requirement for the first time.
-     */
-    requirementId: integer().notNull().unique(),
-    score: numeric().notNull(), // Normalized score (e.g., 0.0 to 1.0)
-    explanation: varchar().notNull(), // Model-provided justification for the score
-    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-  },
-  (table) => [
-    foreignKey({
-      columns: [table.requirementId],
-      foreignColumns: [requirements.id],
-      name: "evaluations_requirement_id_fkey",
-    }).onDelete("cascade"),
-  ],
-)
+export const evaluations = pgTable("evaluations", {
+  id: integer().primaryKey().generatedAlwaysAsIdentity(),
+  /**
+   * One evaluation per requirement. Unlike prompts.canvas_version_id, this is a scenario where a 1:0 situation would initially be acceptable
+   * until the user decides to evaluate a requirement for the first time.
+   */
+  requirementId: integer()
+    .references(() => requirements.id, {
+      onDelete: "cascade",
+    })
+    .notNull()
+    .unique(),
+  score: numeric().notNull(), // Normalized score (e.g., 0.0 to 1.0)
+  explanation: varchar().notNull(), // Model-provided justification for the score
+  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+})
 
 /**
  * The model-generated response for a canvas version.
  */
-export const responses = pgTable(
-  "responses",
-  {
-    id: integer().primaryKey().generatedAlwaysAsIdentity(),
-    // One response per canvas version. See prompts.canvas_version_id for additional notes.
-    canvasVersionId: integer().notNull().unique(),
-    // The actual response text. If null, indicates user has never generated a response.
-    // If empty string, indicates user has cleared out a previously generated response.
-    content: varchar(),
-    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-  },
-  (table) => [
-    foreignKey({
-      columns: [table.canvasVersionId],
-      foreignColumns: [canvasVersions.id],
-      name: "responses_canvas_version_id_fkey",
-    }).onDelete("cascade"),
-  ],
-)
+export const responses = pgTable("responses", {
+  id: integer().primaryKey().generatedAlwaysAsIdentity(),
+  // One response per canvas version. See prompts.canvas_version_id for additional notes.
+  canvasVersionId: integer()
+    .references(() => canvasVersions.id, {
+      onDelete: "cascade",
+    })
+    .notNull()
+    .unique(),
+  // The actual response text. If null, indicates user has never generated a response.
+  // If empty string, indicates user has cleared out a previously generated response.
+  content: varchar(),
+  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+})
 
 /**
  * Represents files attached to a prompt, such as images or reference documents.
@@ -333,26 +349,18 @@ export const responses = pgTable(
  * In such cases, errors should be handled gracefully in the app with UI messaging,
  * and incidents should be logged (e.g., in Sentry). The corrupted database row should then be deleted.
  */
-export const files = pgTable(
-  "files",
-  {
-    id: integer().primaryKey().generatedAlwaysAsIdentity(),
-    promptId: integer(),
-    name: varchar().notNull(),
-    url: varchar().notNull(),
-    mimeType: varchar().notNull(),
-    fileSize: integer().notNull(),
-    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-  },
-  (table) => [
-    foreignKey({
-      columns: [table.promptId],
-      foreignColumns: [prompts.id],
-      name: "files_prompt_id_fkey",
-    }).onDelete("set null"),
-  ],
-)
+export const files = pgTable("files", {
+  id: integer().primaryKey().generatedAlwaysAsIdentity(),
+  promptId: integer().references(() => prompts.id, {
+    onDelete: "set null",
+  }),
+  name: varchar().notNull(),
+  url: varchar().notNull(),
+  mimeType: varchar().notNull(),
+  fileSize: integer().notNull(),
+  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+})
 
 /**
  * Role definitions for access control (e.g., admin, user).
@@ -441,38 +449,30 @@ export const userRoles = pgTable(
  *
  * This design enables flexible authentication while ensuring each user has exactly one account in the system, regardless of their login method.
  */
-export const accounts = pgTable(
-  "accounts",
-  {
-    id: integer().primaryKey().generatedAlwaysAsIdentity(),
-    userId: integer().notNull(),
-    // Provider-specific account or user ID
-    accountId: text().notNull(),
-    // The OAuth provider, or 'email_password'
-    provider: authProviderEnum().notNull(),
-    accessToken: text(),
-    refreshToken: text(),
-    accessTokenExpiresAt: timestamp({
-      withTimezone: true,
-    }),
-    refreshTokenExpiresAt: timestamp({
-      withTimezone: true,
-    }),
-    scope: text(),
-    idToken: text(),
-    // Only for email/password auth
-    password: varchar(),
-    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-  },
-  (table) => [
-    foreignKey({
-      columns: [table.userId],
-      foreignColumns: [users.id],
-      name: "accounts_user_id_fkey",
-    }).onDelete("cascade"),
-  ],
-)
+export const accounts = pgTable("accounts", {
+  id: integer().primaryKey().generatedAlwaysAsIdentity(),
+  userId: integer()
+    .references(() => users.id, { onDelete: "cascade" })
+    .notNull(),
+  // Provider-specific account or user ID
+  accountId: text().notNull(),
+  // The OAuth provider, or 'email_password'
+  provider: authProviderEnum().notNull(),
+  accessToken: text(),
+  refreshToken: text(),
+  accessTokenExpiresAt: timestamp({
+    withTimezone: true,
+  }),
+  refreshTokenExpiresAt: timestamp({
+    withTimezone: true,
+  }),
+  scope: text(),
+  idToken: text(),
+  // Only for email/password auth
+  password: varchar(),
+  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+})
 
 /**
  * Authenticated sessions for users.
@@ -493,47 +493,35 @@ export const accounts = pgTable(
  * - When the token format changes
  * - To enforce new global authentication policies
  */
-export const sessions = pgTable(
-  "sessions",
-  {
-    id: integer().primaryKey().generatedAlwaysAsIdentity(),
-    userId: integer().notNull(),
-    token: text().notNull().unique(),
-    expiresAt: timestamp({ withTimezone: true }).notNull(),
-    ipAddress: varchar(),
-    userAgent: varchar(),
-    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-  },
-  (table) => [
-    foreignKey({
-      columns: [table.userId],
-      foreignColumns: [users.id],
-      name: "sessions_user_id_fkey",
-    }).onDelete("cascade"),
-  ],
-)
+export const sessions = pgTable("sessions", {
+  id: integer().primaryKey().generatedAlwaysAsIdentity(),
+  userId: integer()
+    .references(() => users.id, {
+      onDelete: "cascade",
+    })
+    .notNull(),
+  token: text().notNull().unique(),
+  expiresAt: timestamp({ withTimezone: true }).notNull(),
+  ipAddress: varchar(),
+  userAgent: varchar(),
+  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+})
 
 /*
  * Tools used during prompt execution, like function-calling plugins.
  */
-export const tools = pgTable(
-  "tools",
-  {
-    id: integer().primaryKey().generatedAlwaysAsIdentity(),
-    promptId: integer().notNull(),
-    type: toolTypeEnum().notNull(),
-    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-  },
-  (table) => [
-    foreignKey({
-      columns: [table.promptId],
-      foreignColumns: [prompts.id],
-      name: "tools_prompt_id_fkey",
-    }).onDelete("cascade"),
-  ],
-)
+export const tools = pgTable("tools", {
+  id: integer().primaryKey().generatedAlwaysAsIdentity(),
+  promptId: integer()
+    .references(() => prompts.id, {
+      onDelete: "cascade",
+    })
+    .notNull(),
+  type: toolTypeEnum().notNull(),
+  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+})
 
 /**
  * Temporary codes used for verifying emails, resetting passwords, etc.
