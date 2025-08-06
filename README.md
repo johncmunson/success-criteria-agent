@@ -100,34 +100,7 @@
 
 ## Drizzle Improvements
 
-xx - auto snake_case
-xx - https://orm.drizzle.team/docs/sql-schema-declaration#camel-and-snake-casing
-
-xx - spread timestamps
-xx - https://orm.drizzle.team/docs/sql-schema-declaration#advanced
-
-xx - lifecycle hooks (for dates)
-xx - updatedAt: timestamp({ mode: 'date', precision: 3 }).$onUpdate(() => new Date()),
-  alwaysNull: text().$type<string | null>().$onUpdate(() => null),
-xx - https://orm.drizzle.team/docs/column-types/pg#default-value
-
-xx - id: serial("id").primaryKey(), --> id: integer().primaryKey().generatedAlwaysAsIdentity(),
-
 - indexes
-- https://orm.drizzle.team/docs/indexes-constraints#indexes
-
-xx - FKs
-xx - https://orm.drizzle.team/docs/indexes-constraints#foreign-key
-
-- soft relations
-- https://orm.drizzle.team/docs/relations
-
-xx - FK actions (on delete)
-xx - https://orm.drizzle.team/docs/relations#foreign-key-actions
-
-- Double check the bridge tables
-- primaryKey({ columns: [table.userId, table.roleId] }),
-
-- "check" constraints
-
-- text -> varchar
+  - https://orm.drizzle.team/docs/indexes-constraints#indexes
+- "check" constraints?
+- varchar limits
