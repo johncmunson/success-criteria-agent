@@ -6,11 +6,10 @@ import {
   boolean,
   timestamp,
   integer,
-  foreignKey,
   numeric,
   primaryKey,
-  text,
   AnyPgColumn,
+  unique,
 } from "drizzle-orm/pg-core"
 
 /**
@@ -100,6 +99,8 @@ export const verificationTypeEnum = pgEnum("verification_type_enum", [
 export const users = pgTable("users", {
   id: integer().primaryKey().generatedAlwaysAsIdentity(),
   name: varchar().notNull(),
+  // TODO: Be sure to normalize and lowercase emails before inserting or querying.
+  // TODO: Decide how to handle email plus addressing.
   email: varchar().unique().notNull(),
   emailVerified: boolean().notNull().default(false),
   // Optional profile image from OAuth provider. Could also allow the user
@@ -531,29 +532,33 @@ export const usersToRolesRelations = relations(usersToRoles, ({ one }) => ({
  *
  * This design enables flexible authentication while ensuring each user has exactly one account in the system, regardless of their login method.
  */
-export const accounts = pgTable("accounts", {
-  id: integer().primaryKey().generatedAlwaysAsIdentity(),
-  userId: integer()
-    .references(() => users.id, { onDelete: "cascade" })
-    .notNull(),
-  // Provider-specific account or user ID
-  accountId: text().notNull(),
-  // The OAuth provider, or 'email_password'
-  provider: authProviderEnum().notNull(),
-  accessToken: text(),
-  refreshToken: text(),
-  accessTokenExpiresAt: timestamp({
-    withTimezone: true,
-  }),
-  refreshTokenExpiresAt: timestamp({
-    withTimezone: true,
-  }),
-  scope: text(),
-  idToken: text(),
-  // Only for email/password auth
-  password: varchar(),
-  ...timestamps,
-})
+export const accounts = pgTable(
+  "accounts",
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    userId: integer()
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    // Provider-specific account or user ID
+    accountId: varchar().notNull(),
+    // The OAuth provider, or 'email_password'
+    provider: authProviderEnum().notNull(),
+    accessToken: varchar(),
+    refreshToken: varchar(),
+    accessTokenExpiresAt: timestamp({
+      withTimezone: true,
+    }),
+    refreshTokenExpiresAt: timestamp({
+      withTimezone: true,
+    }),
+    scope: varchar(),
+    idToken: varchar(),
+    // Only for email/password auth
+    password: varchar(),
+    ...timestamps,
+  },
+  (table) => [unique().on(table.provider, table.accountId)],
+)
 
 export const accountsRelations = relations(accounts, ({ one }) => ({
   user: one(users, {
@@ -588,7 +593,7 @@ export const sessions = pgTable("sessions", {
       onDelete: "cascade",
     })
     .notNull(),
-  token: text().notNull().unique(),
+  token: varchar().notNull().unique(),
   expiresAt: timestamp({ withTimezone: true }).notNull(),
   ipAddress: varchar(),
   userAgent: varchar(),
