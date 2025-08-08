@@ -1,108 +1,140 @@
-import { drizzle as drizzleNeon } from "drizzle-orm/neon-serverless"
+import { Pool as PgPool } from "pg"
 import { drizzle as drizzlePg } from "drizzle-orm/node-postgres"
 import { Pool as NeonPool, neonConfig } from "@neondatabase/serverless"
-import { Pool as PgPool } from "pg"
+import { drizzle as drizzleNeon } from "drizzle-orm/neon-serverless"
 import ws from "ws"
+import { getEnvVar } from "@/lib/utils"
 import * as schema from "./schema"
 
-/*
-  Centralized database client & pool setup for Neon + Drizzle.
+/**
+ * Database client & pooling strategy for Next.js API routes on Vercel (Node runtime, Fluid Compute)
+ *
+ * Objectives
+ * - Maintain strong parity across prod/dev/test while optimizing for each environment’s constraints.
+ * - Use a single DATABASE_URL everywhere and consistent tuning knobs.
+ *
+ * Environments
+ * - Production: Neon with client-side pooling over WebSockets.
+ *   - Uses @neondatabase/serverless Pool + WebSocket transport (neonConfig.webSocketConstructor = ws).
+ *   - Requires a direct Neon URL (no “-pooler”) to avoid double pooling; we assert this at startup.
+ *   - Drizzle driver: drizzle-orm/neon-serverless.
+ * - Development/Test: Local Postgres via node-postgres.
+ *   - Uses pg.Pool to mirror pooled behavior.
+ *   - Drizzle driver: drizzle-orm/node-postgres.
+ *
+ * Parity choices
+ * - All environments construct a Pool and bind Drizzle to that Pool; only the driver/transport differs.
+ * - Pool tuning is uniform:
+ *     DB_MAX_CONNECTIONS  -> pool.max
+ *     DB_IDLE_TIMEOUT_MS  -> pool.idleTimeoutMillis
+ * - One DATABASE_URL; no env-specific variable sprawl.
+ *
+ * Vercel Fluid Compute / Next.js specifics
+ * - We keep the pool at module scope. In production, warm containers reuse it across invocations.
+ * - In development, a globalThis guard preserves a single pool across HMR to prevent leaks and
+ *   avoid spawning new pools on every file change.
+ *
+ * Testing
+ * - Vitest runs migrations once in a setup file.
+ * - Tests use a tiny pg.Pool (e.g., max=1) for stability and isolation.
+ * - Use closePool() in afterAll to ensure clean shutdown.
+ * - Vitest config for strong isolation and no shared state:
+ * - { test: { pool: 'forks', fileParalellism: false, isolate: true, maxWorkers: 1, minWorkers: 1 } }
+ */
 
-  - Production (Vercel Fluid, Node runtime):
-    Uses a module-scoped singleton pool so all requests in a warm instance share connections.
-    Default to a small pool size (~5) since each instance has its own pool; scale cautiously.
+type AnyPool = PgPool | NeonPool
+type AnyDb = ReturnType<typeof drizzlePg> | ReturnType<typeof drizzleNeon>
 
-  - Development (Next.js with HMR):
-    Wraps the pool in a globalThis guard to prevent new pools on hot reloads, avoiding connection leaks.
+const nodeEnv = getEnvVar("NODE_ENV")
+const isProd = nodeEnv === "production"
+const isDev = nodeEnv === "development"
+const isTest = nodeEnv === "test"
 
-  - Test (Vitest, isolated workers):
-    No globalThis caching; each worker gets its own pool and closes it in afterAll. Use low maxConnections (1–2).
-    Recommended vite config: { { test: { pool: 'forks', isolate: true, fileParallelism: true } } }
-    We want to run tests in parallel, but 'forks' and isolation provide the most stability and leak prevention.
+const databaseUrl = getEnvVar("DATABASE_URL")
 
-  - https://neon.com/docs/connect/connection-pooling
-  - https://neon.com/docs/connect/choose-connection
-  - https://vercel.com/guides/connection-pooling-with-serverless-functions
-*/
-
-type DrizzleDb = ReturnType<typeof drizzleNeon> | ReturnType<typeof drizzlePg>
-
-const NODE_ENV = process.env.NODE_ENV
-const isProd = NODE_ENV === "production"
-const isDev = NODE_ENV === "development"
-// const isTest = NODE_ENV === "test"
-
-const connectionString = process.env.DATABASE_URL!
-
-// Suggested starting point for DB_MAX_CONNECTIONS:
-// prod: ~5 (per Fluid instance; prevents exhausting Neon connections)
-// dev: same as prod (globalThis guard handles HMR reloads)
-// test: 1–2 (many parallel workers)
-// Tune over time based on load and connection limits.
-const maxConnections = parseInt(process.env.DB_MAX_CONNECTIONS ?? "5", 10)
-const idleTimeoutMs = parseInt(process.env.DB_IDLE_TIMEOUT_MS ?? "10000", 10)
-
-declare global {
-  // Dev-only HMR cache
-  // (Do not use in test; Vitest manages its own isolation)
-  // eslint-disable-next-line no-var
-  var __DB__: DrizzleDb | undefined
-  // eslint-disable-next-line no-var
-  var __POOL__: NeonPool | PgPool | undefined
+// When using client-side pooling with Neon, ensure a direct URL (no "-pooler").
+if (isProd && /-pooler\./.test(databaseUrl)) {
+  throw new Error(
+    'DATABASE_URL must be a direct Neon endpoint (no "-pooler") when using client-side pooling.',
+  )
 }
 
-let _pool: NeonPool | PgPool | undefined
-let _db: DrizzleDb | undefined
+const defaultMaxConnections = isProd ? 10 : isTest ? 1 : 5
 
-function createDb(): { pool: NeonPool | PgPool; db: DrizzleDb } {
-  if (isProd) {
-    neonConfig.webSocketConstructor = ws
-    const pool = new NeonPool({
-      connectionString,
-      max: maxConnections,
-      idleTimeoutMillis: idleTimeoutMs,
-    })
-    const db = drizzleNeon(pool, { schema, casing: "snake_case" })
-    return { pool, db }
-  }
-  // dev/test: node-postgres by default
-  const pool = new PgPool({
-    connectionString,
+const defaultIdleTimeoutMs = 10_000
+
+const maxConnections = Number.isFinite(Number(process.env.DB_MAX_CONNECTIONS))
+  ? Number(process.env.DB_MAX_CONNECTIONS)
+  : defaultMaxConnections
+
+const idleTimeoutMs = Number.isFinite(Number(process.env.DB_IDLE_TIMEOUT_MS))
+  ? Number(process.env.DB_IDLE_TIMEOUT_MS)
+  : defaultIdleTimeoutMs
+
+function createProdPool(): NeonPool {
+  // For Neon, we need to set the WebSocket constructor for client-side pooling.
+  neonConfig.webSocketConstructor = ws as unknown as typeof WebSocket
+
+  return new NeonPool({
+    connectionString: databaseUrl,
     max: maxConnections,
     idleTimeoutMillis: idleTimeoutMs,
   })
-  const db = drizzlePg(pool, { schema, casing: "snake_case" })
-  return { pool, db }
 }
 
-// Initialize
+function createDevOrTestPool(): PgPool {
+  return new PgPool({
+    connectionString: databaseUrl,
+    max: maxConnections,
+    idleTimeoutMillis: idleTimeoutMs,
+  })
+}
+
+function createDbAndPool(): { db: AnyDb; pool: AnyPool } {
+  if (isProd) {
+    const pool = createProdPool()
+    const db = drizzleNeon(pool, { schema })
+    return { db, pool }
+  } else {
+    const pool = createDevOrTestPool()
+    const db = drizzlePg(pool, { schema })
+    return { db, pool }
+  }
+}
+
+const g = globalThis as unknown as {
+  __DB__?: AnyDb
+  __POOL__?: AnyPool
+}
+
+let db: AnyDb
+let pool: AnyPool
+
 if (isDev) {
-  if (!globalThis.__DB__ || !globalThis.__POOL__) {
-    const { pool, db } = createDb()
-    globalThis.__POOL__ = pool
-    globalThis.__DB__ = db
+  // In dev, use the global object to persist the pool/db across Next.js HMR reloads.
+  // This allows us to avoid creating a new pool/db on every file change.
+  if (!g.__POOL__ || !g.__DB__) {
+    const created = createDbAndPool()
+    g.__POOL__ = created.pool
+    g.__DB__ = created.db
   }
-  _pool = globalThis.__POOL__
-  _db = globalThis.__DB__
+  db = g.__DB__!
+  pool = g.__POOL__!
 } else {
-  // production or test: no globalThis
-  const created = createDb()
-  _pool = created.pool
-  _db = created.db
+  const created = createDbAndPool()
+  db = created.db
+  pool = created.pool
 }
 
-export function getDb(): DrizzleDb {
-  return _db!
-}
-
-// Never call per request; tests and CLIs should call this in teardown.
-export async function closeDb() {
-  const p = _pool
-  _pool = undefined
-  _db = undefined
-  if (isDev) {
-    globalThis.__POOL__ = undefined
-    globalThis.__DB__ = undefined
+// For use in test cleanup. Do not use in route handlers or other code that runs in production.
+async function closePool(): Promise<void> {
+  if (pool) {
+    await pool.end()
   }
-  if (p) await p.end()
+  if (isDev) {
+    g.__POOL__ = undefined
+    g.__DB__ = undefined
+  }
 }
+
+export { db, closePool }
