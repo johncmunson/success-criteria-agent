@@ -1,4 +1,4 @@
-import { relations } from "drizzle-orm"
+import { relations, sql } from "drizzle-orm"
 import {
   pgEnum,
   pgTable,
@@ -10,6 +10,8 @@ import {
   primaryKey,
   AnyPgColumn,
   unique,
+  index,
+  uniqueIndex,
 } from "drizzle-orm/pg-core"
 
 /**
@@ -170,37 +172,48 @@ export const canvasesRelations = relations(canvases, ({ one, many }) => ({
 }))
 
 /**
- * Each canvas_version represents either a draft (being edited) or an immutable saved snapshot of a canvas.
+ * Each canvas version represents either a draft (being edited) or an immutable saved snapshot of a canvas.
  * A draft becomes a version when finalized. Versions are immutable once saved.
  * The very first draft or version has no parent_version_id.
  *
  * This schema design supports both linear versioning and branching.
  */
-export const canvasVersions = pgTable("canvas_versions", {
-  id: integer().primaryKey().generatedAlwaysAsIdentity(),
-  canvasId: integer()
-    .references(() => canvases.id, { onDelete: "cascade" })
-    .notNull(),
-  /**
-   * If a version is deleted, all children and grandchildren will be deleted too.
-   * Use with care if enabling branching version trees.
-   *
-   * Also, since this is a self-referential foreign key, Drizzle requires us to
-   * explicitly define the return type of the callback function using AnyPgColumn.
-   *
-   * TODO: If we're gonna start out with a linear versioning system, then we likely
-   * want to add a unique constraint here to ensure that any given canvas version
-   * has at most one child. This would enforce the reflexive one-to-one relationship
-   * inherent in a linear versioning system. If we later decide to move to a branching
-   * versioning system, we can remove this constraint.
-   */
-  parentVersionId: integer().references((): AnyPgColumn => canvasVersions.id, {
-    onDelete: "cascade",
-  }),
-  name: varchar(),
-  isDraft: boolean().notNull(),
-  ...timestamps,
-})
+export const canvasVersions = pgTable(
+  "canvas_versions",
+  {
+    id: integer().primaryKey().generatedAlwaysAsIdentity(),
+    canvasId: integer()
+      .references(() => canvases.id, { onDelete: "cascade" })
+      .notNull(),
+    /**
+     * If a version is deleted, all children and grandchildren will be deleted too.
+     * Use with care if enabling branching version trees.
+     *
+     * Also, since this is a self-referential foreign key, Drizzle requires us to
+     * explicitly define the return type of the callback function using AnyPgColumn.
+     *
+     * The unique constraint enforces the reflexive one-to-one relationship inherent
+     * in a linear versioning system. If we later decide to move to a branching
+     * versioning system, we can remove this constraint. Nulls are not considered
+     * equal in SQL, so this design still allows for many root versions (with
+     * null parent_version_id) across canvases and users.
+     */
+    parentVersionId: integer()
+      .references((): AnyPgColumn => canvasVersions.id, {
+        onDelete: "cascade",
+      })
+      .unique(),
+    name: varchar(),
+    isDraft: boolean().notNull(),
+    ...timestamps,
+  },
+  (t) => [
+    // Partial unique index: at most one draft per canvas
+    uniqueIndex("uniq_canvas_draft")
+      .on(t.canvasId)
+      .where(sql`${t.isDraft} = true`),
+  ],
+)
 
 export const canvasVersionsRelations = relations(
   canvasVersions,
