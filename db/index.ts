@@ -1,149 +1,108 @@
 import { drizzle as drizzleNeon } from "drizzle-orm/neon-serverless"
 import { drizzle as drizzlePg } from "drizzle-orm/node-postgres"
-
 import { Pool as NeonPool, neonConfig } from "@neondatabase/serverless"
 import { Pool as PgPool } from "pg"
 import ws from "ws"
 import * as schema from "./schema"
-import { getEnvVar } from "@/lib/utils"
+
+/*
+  Centralized database client & pool setup for Neon + Drizzle.
+
+  - Production (Vercel Fluid, Node runtime):
+    Uses a module-scoped singleton pool so all requests in a warm instance share connections.
+    Default to a small pool size (~5) since each instance has its own pool; scale cautiously.
+
+  - Development (Next.js with HMR):
+    Wraps the pool in a globalThis guard to prevent new pools on hot reloads, avoiding connection leaks.
+
+  - Test (Vitest, isolated workers):
+    No globalThis caching; each worker gets its own pool and closes it in afterAll. Use low maxConnections (1–2).
+    Recommended vite config: { { test: { pool: 'forks', isolate: true, fileParallelism: true } } }
+    We want to run tests in parallel, but 'forks' and isolation provide the most stability and leak prevention.
+
+  - https://neon.com/docs/connect/connection-pooling
+  - https://neon.com/docs/connect/choose-connection
+  - https://vercel.com/guides/connection-pooling-with-serverless-functions
+*/
 
 type DrizzleDb = ReturnType<typeof drizzleNeon> | ReturnType<typeof drizzlePg>
 
-const dbCache = new WeakMap<
-  Request,
-  { db: DrizzleDb; cleanup: () => Promise<void> }
->()
+const NODE_ENV = process.env.NODE_ENV
+const isProd = NODE_ENV === "production"
+const isDev = NODE_ENV === "development"
+// const isTest = NODE_ENV === "test"
 
-/**
- * getDb dynamically chooses the appropriate database driver and returns a Drizzle-ORM instance
- * along with a cleanup function for use in Next.js App Router handlers.
- *
- * - In production, we use Neon because it's a modern Postgres service that pairs well with
- *   Vercel Serverless Functions and supports connection pooling via WebSocket (`ws`). Using `ws`
- *   with Neon enables pooling, which is otherwise not available with Neon HTTP connections.
- * - Locally, we use regular Postgres (node-postgres), as it's simpler to run and closely mirrors
- *   the Neon setup, keeping dev and prod as similar as possible.
- *
- * - Drizzle is used in both cases to standardize the application code, making it easier to switch
- *   environments without changes to query logic.
- * - The pooling setup is intentionally similar for both drivers, as Neon serverless is designed to
- *   be a drop-in replacement for node-postgres, maintaining parity between environments.
- *
- * - A WeakMap<Request, { db, cleanup }> is used to cache the database connection and cleanup
- *   function per request. This is critical in Vercel Serverless Functions and similar environments,
- *   where you should treat each request as isolated. Caching by request ensures db connections are
- *   not leaked across invocations and helps avoid resource contention.
- *
- * - `maxConnections` limits how many database connections the pool can have open at once.
- *   `idleTimeoutMs` (or `idleTimeoutMillis`) controls how long idle connections stay open before
- *   being closed. Tuning these values can help balance database load and cold start performance:
- *   higher values may increase throughput, but risk exhausting db resources; lower values may
- *   conserve resources, but increase latency if new connections need to be opened.
- */
-export function getDb(req: Request): {
-  db: DrizzleDb
-  cleanup: () => Promise<void>
-} {
-  if (dbCache.has(req)) return dbCache.get(req)!
+const connectionString = process.env.DATABASE_URL!
 
-  const useNeon = getEnvVar("USE_NEON") === "true"
-  const connectionString = getEnvVar("DATABASE_URL")
-  const maxConnections = parseInt(getEnvVar("DB_MAX_CONNECTIONS") || "3", 10)
-  const idleTimeoutMs = parseInt(getEnvVar("DB_IDLE_TIMEOUT_MS") || "10000", 10)
+// Suggested starting point for DB_MAX_CONNECTIONS:
+// prod: ~5 (per Fluid instance; prevents exhausting Neon connections)
+// dev: same as prod (globalThis guard handles HMR reloads)
+// test: 1–2 (many parallel workers)
+// Tune over time based on load and connection limits.
+const maxConnections = parseInt(process.env.DB_MAX_CONNECTIONS ?? "5", 10)
+const idleTimeoutMs = parseInt(process.env.DB_IDLE_TIMEOUT_MS ?? "10000", 10)
 
-  let db: DrizzleDb
-  let cleanup: () => Promise<void>
-  let pool: NeonPool | PgPool
+declare global {
+  // Dev-only HMR cache
+  // (Do not use in test; Vitest manages its own isolation)
+  // eslint-disable-next-line no-var
+  var __DB__: DrizzleDb | undefined
+  // eslint-disable-next-line no-var
+  var __POOL__: NeonPool | PgPool | undefined
+}
 
-  if (useNeon) {
+let _pool: NeonPool | PgPool | undefined
+let _db: DrizzleDb | undefined
+
+function createDb(): { pool: NeonPool | PgPool; db: DrizzleDb } {
+  if (isProd) {
     neonConfig.webSocketConstructor = ws
-
-    pool = new NeonPool({
+    const pool = new NeonPool({
       connectionString,
       max: maxConnections,
       idleTimeoutMillis: idleTimeoutMs,
     })
-
-    db = drizzleNeon(pool as NeonPool, { schema, casing: "snake_case" })
-    cleanup = async () => await pool.end()
-  } else {
-    pool = new PgPool({
-      connectionString,
-      max: maxConnections,
-      idleTimeoutMillis: idleTimeoutMs,
-    })
-
-    db = drizzlePg(pool as PgPool, { schema, casing: "snake_case" })
-    cleanup = async () => await pool.end()
+    const db = drizzleNeon(pool, { schema, casing: "snake_case" })
+    return { pool, db }
   }
-
-  dbCache.set(req, { db, cleanup })
-  return {
-    db,
-    cleanup,
-  }
+  // dev/test: node-postgres by default
+  const pool = new PgPool({
+    connectionString,
+    max: maxConnections,
+    idleTimeoutMillis: idleTimeoutMs,
+  })
+  const db = drizzlePg(pool, { schema, casing: "snake_case" })
+  return { pool, db }
 }
 
-type RouteHandlerContext<
-  P extends Record<string, string | string[] | undefined> = Record<
-    string,
-    string | string[] | undefined
-  >,
-> = {
-  params: Promise<P>
+// Initialize
+if (isDev) {
+  if (!globalThis.__DB__ || !globalThis.__POOL__) {
+    const { pool, db } = createDb()
+    globalThis.__POOL__ = pool
+    globalThis.__DB__ = db
+  }
+  _pool = globalThis.__POOL__
+  _db = globalThis.__DB__
+} else {
+  // production or test: no globalThis
+  const created = createDb()
+  _pool = created.pool
+  _db = created.db
 }
 
-type HandlerWithDb<
-  P extends Record<string, string | string[] | undefined> = Record<
-    string,
-    string | string[] | undefined
-  >,
-  T = Response,
-> = (params: {
-  db: DrizzleDb
-  req: Request
-  context?: RouteHandlerContext<P>
-}) => Promise<T>
+export function getDb(): DrizzleDb {
+  return _db!
+}
 
-/**
- * withDb is a higher-order function for Next.js route handlers that ensures
- * a database connection is acquired and always cleaned up per request.
- *
- * This is essential in serverless environments, where failing to close the
- * database pool can quickly exhaust available connections.
- *
- * Usage:
- *
- * // Static route:
- * export const GET = withDb(async ({ db, req }) => {
- *   // use db, no params
- *   return new Response("ok");
- * });
- *
- * // Dynamic route (/items/[slug]):
- * export const GET = withDb<{ slug: string }>(async ({ db, req, context }) => {
- *   const { slug } = await context!.params;
- *   // use db and slug
- *   return new Response(slug);
- * });
- */
-export function withDb<
-  P extends Record<string, string | string[] | undefined> = Record<
-    string,
-    string | string[] | undefined
-  >,
-  T = Response,
->(handler: HandlerWithDb<P, T>) {
-  return async function (
-    req: Request,
-    context?: RouteHandlerContext<P>,
-  ): Promise<T> {
-    const { db, cleanup } = getDb(req)
-
-    try {
-      return await handler({ db, req, context })
-    } finally {
-      await cleanup()
-    }
+// Never call per request; tests and CLIs should call this in teardown.
+export async function closeDb() {
+  const p = _pool
+  _pool = undefined
+  _db = undefined
+  if (isDev) {
+    globalThis.__POOL__ = undefined
+    globalThis.__DB__ = undefined
   }
+  if (p) await p.end()
 }
