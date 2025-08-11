@@ -7,7 +7,9 @@ import { getEnvVar } from "@/lib/utils"
 import * as schema from "./schema"
 
 /**
- * Summary: This module standarizes and encapsulates the database connection pooling and Drizzle ORM for...
+ * Summary
+ * Unified Drizzle ORM + Postgres/Neon database pooling setup for consistent prod/dev/test behavior
+ * in Next.js with HMR-safe dev handling
  *
  * Objectives
  * - Maintain strong parity across prod/dev/test while optimizing for each environment’s constraints.
