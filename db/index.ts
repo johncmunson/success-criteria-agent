@@ -1,13 +1,13 @@
+import ws from "ws"
 import { Pool as PgPool } from "pg"
 import { drizzle as drizzlePg } from "drizzle-orm/node-postgres"
 import { Pool as NeonPool, neonConfig } from "@neondatabase/serverless"
 import { drizzle as drizzleNeon } from "drizzle-orm/neon-serverless"
-import ws from "ws"
 import { getEnvVar } from "@/lib/utils"
 import * as schema from "./schema"
 
 /**
- * Database client & pooling strategy for Next.js API routes on Vercel (Node runtime, Fluid Compute)
+ * Summary: This module standarizes and encapsulates the database connection pooling and Drizzle ORM for...
  *
  * Objectives
  * - Maintain strong parity across prod/dev/test while optimizing for each environment’s constraints.
@@ -16,10 +16,10 @@ import * as schema from "./schema"
  * Environments
  * - Production: Neon with client-side pooling over WebSockets.
  *   - Uses @neondatabase/serverless Pool + WebSocket transport (neonConfig.webSocketConstructor = ws).
- *   - Requires a direct Neon URL (no “-pooler”) to avoid double pooling; we assert this at startup.
+ *   - Requires a direct Neon URL (no "-pooler") to avoid double pooling; we assert this at startup.
  *   - Drizzle driver: drizzle-orm/neon-serverless.
  * - Development/Test: Local Postgres via node-postgres.
- *   - Uses pg.Pool to mirror pooled behavior.
+ *   - Uses pg.Pool to mirror pooled behavior in production.
  *   - Drizzle driver: drizzle-orm/node-postgres.
  *
  * Parity choices
@@ -31,14 +31,16 @@ import * as schema from "./schema"
  *
  * Vercel Fluid Compute / Next.js specifics
  * - We keep the pool at module scope. In production, warm containers reuse it across invocations.
+ * - No need to create a new pool/connection for each request, as used to be common in edge/serverless,
+ *   thanks to Vercel's Fluid Compute model.
  * - In development, a globalThis guard preserves a single pool across HMR to prevent leaks and
  *   avoid spawning new pools on every file change.
  *
  * Testing
- * - Vitest runs migrations once in a setup file.
+ * - Run Vitest migrations once in a setup file.
  * - Tests use a tiny pg.Pool (e.g., max=1) for stability and isolation.
  * - Use closePool() in afterAll to ensure clean shutdown.
- * - Vitest config for strong isolation and no shared state:
+ * - Vitest integration testing config for strong isolation and no shared state:
  * - { test: { pool: 'forks', fileParalellism: false, isolate: true, maxWorkers: 1, minWorkers: 1 } }
  */
 
@@ -52,7 +54,8 @@ const isTest = nodeEnv === "test"
 
 const databaseUrl = getEnvVar("DATABASE_URL")
 
-// When using client-side pooling with Neon, ensure a direct URL (no "-pooler").
+// When using client-side pooling with Neon, ensure a direct URL (no "-pooler"), otherwise it will double pool.
+// https://neon.com/docs/connect/choose-connection#common-pitfalls
 if (isProd && /-pooler\./.test(databaseUrl)) {
   throw new Error(
     'DATABASE_URL must be a direct Neon endpoint (no "-pooler") when using client-side pooling.',
@@ -72,7 +75,6 @@ const idleTimeoutMs = Number.isFinite(Number(process.env.DB_IDLE_TIMEOUT_MS))
   : defaultIdleTimeoutMs
 
 function createProdPool(): NeonPool {
-  // For Neon, we need to set the WebSocket constructor for client-side pooling.
   neonConfig.webSocketConstructor = ws as unknown as typeof WebSocket
 
   return new NeonPool({
