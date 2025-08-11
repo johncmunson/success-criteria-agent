@@ -6,6 +6,9 @@ import { drizzle as drizzleNeon } from "drizzle-orm/neon-serverless"
 import { getEnvVar } from "@/lib/utils"
 import * as schema from "./schema"
 
+import type { NodePgDatabase } from "drizzle-orm/node-postgres"
+import type { NeonDatabase } from "drizzle-orm/neon-serverless"
+
 /**
  * Summary
  * Unified Drizzle ORM + Postgres/Neon database pooling setup for consistent prod/dev/test behavior
@@ -47,7 +50,7 @@ import * as schema from "./schema"
  */
 
 type AnyPool = PgPool | NeonPool
-type AnyDb = ReturnType<typeof drizzlePg> | ReturnType<typeof drizzleNeon>
+type AnyDb = NodePgDatabase<typeof schema> | NeonDatabase<typeof schema>
 
 const nodeEnv = getEnvVar("NODE_ENV")
 const isProd = nodeEnv === "production"
