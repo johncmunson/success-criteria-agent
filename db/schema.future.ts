@@ -10,7 +10,6 @@ import {
   primaryKey,
   AnyPgColumn,
   unique,
-  index,
   uniqueIndex,
 } from "drizzle-orm/pg-core"
 

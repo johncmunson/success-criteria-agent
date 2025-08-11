@@ -1,4 +1,4 @@
-import { relations, sql } from "drizzle-orm"
+import { relations } from "drizzle-orm"
 import {
   pgEnum,
   pgTable,
@@ -6,12 +6,8 @@ import {
   boolean,
   timestamp,
   integer,
-  numeric,
   primaryKey,
-  AnyPgColumn,
   unique,
-  index,
-  uniqueIndex,
 } from "drizzle-orm/pg-core"
 
 /**
